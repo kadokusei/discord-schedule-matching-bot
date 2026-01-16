@@ -1,0 +1,19 @@
+name = "discord-schedule-matching-bot"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[env.development]
+vars = { ENVIRONMENT = "development" }
+
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "development-db"
+database_id = "local"
+
+[env.production]
+vars = { ENVIRONMENT = "production" }
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "production-db"
+database_id = "<PRODUCTION_DATABASE_ID>"
