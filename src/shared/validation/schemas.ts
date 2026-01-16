@@ -1,11 +1,5 @@
 import { z } from "zod";
 
-interface CommandOption {
-  name: string;
-  value?: string | number;
-  options?: CommandOption[];
-}
-
 // --- 基本スキーマ ---
 
 export const regionSchema = z.enum(["na", "eu", "ap", "kr", "latam", "br"], {

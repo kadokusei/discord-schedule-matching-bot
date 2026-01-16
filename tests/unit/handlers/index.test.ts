@@ -16,7 +16,7 @@ describe("recomputeMatch - Discord API error handling", () => {
       } as Response);
     });
 
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     // Simulate the error handling flow
     const result: { dbUpdated: boolean; errorLogged: boolean } = {
@@ -69,7 +69,7 @@ describe("recomputeMatch - Discord API error handling", () => {
       } as Response),
     );
 
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     const result: { messageLogged: boolean; errorHandled: boolean } = {
       messageLogged: false,

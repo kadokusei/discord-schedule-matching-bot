@@ -5,7 +5,7 @@ import {
   riotAccountAddOptionsSchema,
   riotAccountRemoveOptionsSchema,
   recruitOptionsSchema,
-} from "../../src/utils/validation";
+} from "../../src/shared/validation";
 
 describe("validation", () => {
   describe("regionSchema", () => {

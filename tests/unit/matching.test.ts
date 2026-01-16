@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeBestParty } from "../../src/utils/matching.js";
+import { computeBestParty } from "../../src/features/matching";
 
 describe("formatRankEvaluation", () => {
   // Inline implementation for testing (due to Cloudflare Workers pool limitations)

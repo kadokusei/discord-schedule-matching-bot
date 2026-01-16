@@ -91,7 +91,7 @@ describe("handleScheduled - reminder failure handling", () => {
       } as Response);
     });
 
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     // Simulate processing multiple reminders
     const targets = [
@@ -155,7 +155,7 @@ describe("handleScheduled - reminder failure handling", () => {
       } as Response),
     );
 
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     const targets = [
       { userId: "user1", channelId: "ch1", recruitId: "recruit1" },
@@ -205,7 +205,7 @@ describe("handleScheduled - reminder failure handling", () => {
       } as Response),
     );
 
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     const target = { userId: "user1", channelId: "ch1", recruitId: "recruit1" };
 
