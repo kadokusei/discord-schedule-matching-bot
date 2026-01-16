@@ -144,4 +144,5 @@ dist
 # End of https://www.toptal.com/developers/gitignore/api/node
 
 plans/
-mise.toml
+
+.claude/settings.local.json

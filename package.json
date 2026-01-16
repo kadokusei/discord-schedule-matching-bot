@@ -4,8 +4,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "bunx vitest",
-    "test:ui": "bunx vitest --ui",
+    "test": "bun vitest",
+    "test:ui": "bun vitest --ui",
     "lint": "biome lint src/ tests/",
     "format": "biome format --write src/ tests/",
     "format:check": "biome format src/ tests/",

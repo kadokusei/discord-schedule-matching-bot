@@ -79,22 +79,22 @@ Uses tier hierarchy (Iron < Bronze < ... < Radiant) to calculate rank variance a
 ### Database Migrations
 
 ```bash
-npm run db:generate  # Generate migration from schema changes
-npm run db:migrate   # Apply migrations
+bun run db:generate  # Generate migration from schema changes
+bun run db:migrate   # Apply migrations
 ```
 
 ### Testing
 
 ```bash
-npm run test         # Run tests
-npm run test:ui      # Run tests with UI
+bun run test         # Run tests
+bun run test:ui      # Run tests with UI
 ```
 
 ### Linting/Formatting
 
 ```bash
-npm run lint         # Check code
-npm run format       # Format code
+bun run lint         # Check code
+bun run format       # Format code
 ```
 
 ## Important Notes

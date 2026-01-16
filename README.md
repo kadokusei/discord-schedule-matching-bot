@@ -67,8 +67,8 @@ database_id = "local"
 
 4. データベースのマイグレーション
 ```bash
-npm run db:generate
-npm run db:migrate
+bun run db:generate
+bun run db:migrate
 ```
 
 ## 使用方法
@@ -76,13 +76,13 @@ npm run db:migrate
 ### ローカル開発
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 ### デプロイ
 
 ```bash
-npm run deploy
+bun run deploy
 ```
 
 ## Discordコマンド
