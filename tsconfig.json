@@ -3,7 +3,7 @@
      "target": "ES2022",
      "module": "ES2022",
      "lib": ["ES2022"],
-     "types": ["@cloudflare/workers-types/experimental", "@cloudflare/vitest-pool-workers"],
+     "types": ["@cloudflare/workers-types/experimental", "@cloudflare/vitest-pool-workers", "vitest/globals"],
      "moduleResolution": "bundler",
      "resolveJsonModule": true,
      "allowJs": true,

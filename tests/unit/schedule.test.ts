@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { shouldCreateInstance } from "../../src/utils/schedule.js";
+import { shouldCreateInstance, type RecruitInstance } from "../../src/features/recruit";
 
 describe("shouldCreateInstance", () => {
   it("should return false before post_time", () => {
     const nowUtc = new Date("2026-01-16T20:00:00.000Z");
     const schedule = { postTimeHHmm: "21:00" };
     const tz = "Asia/Tokyo";
-    const existingInstances = [];
+    const existingInstances: RecruitInstance[] = [];
 
     const result = shouldCreateInstance(
       nowUtc,
@@ -22,7 +22,7 @@ describe("shouldCreateInstance", () => {
     const nowUtc = new Date("2026-01-16T21:01:00.000Z");
     const schedule = { postTimeHHmm: "21:00" };
     const tz = "Asia/Tokyo";
-    const existingInstances = [];
+    const existingInstances: RecruitInstance[] = [];
 
     const result = shouldCreateInstance(
       nowUtc,

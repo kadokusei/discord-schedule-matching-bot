@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTimeOptions } from "../../src/utils/time.js";
+import { buildTimeOptions, type TimeOption } from "../../src/shared/time";
 
 describe("buildTimeOptions", () => {
   it("should generate 13 options with HH:mm labels and ISO 8601 values", () => {
@@ -44,7 +44,7 @@ describe("buildTimeOptions", () => {
 
     expect(result).toHaveLength(13);
 
-    const values = result.map((o) => o.value);
+    const values = result.map((o: TimeOption) => o.value);
     const uniqueValues = new Set(values);
     expect(uniqueValues.size).toBe(13);
   });
