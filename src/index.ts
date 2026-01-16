@@ -29,6 +29,7 @@ import { formatRankLabel, fetchValorantRank } from "./utils/riot";
 import { buildTimeOptions } from "./utils/time";
 import { shouldCreateInstance } from "./utils/schedule";
 import { buildReminderMessage, filterPendingReminders } from "./utils/reminder";
+import * as v from "./utils/validation";
 
 interface Env {
   DISCORD_PUBLIC_KEY: string;
@@ -170,18 +171,25 @@ async function handleRecruitCommand(
   const channelId = body.channel_id ?? "";
   const creatorId = body.member?.user?.id ?? body.user?.id ?? "";
 
-  const postTime = body.data?.options?.[0]?.value;
-  const interval = body.data?.options?.[1]?.value;
-  const duration = body.data?.options?.[2]?.value;
+  const optionsObj = Object.fromEntries(
+    (body.data?.options?.[0]?.options ?? []).map((opt) => [
+      opt.name,
+      opt.value,
+    ]),
+  );
 
-  if (!postTime) {
+  const parsed = v.recruitOptionsSchema.safeParse(optionsObj);
+
+  if (!parsed.success) {
     return c.json({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
-        content: "エラー: post_timeパラメータは必須です",
+        content: parsed.error.issues[0].message,
       },
     });
   }
+
+  const { post_time, interval, duration } = parsed.data;
 
   if (!guildId || !channelId || !creatorId) {
     return c.json({
@@ -195,8 +203,8 @@ async function handleRecruitCommand(
   const db = drizzle(c.env.DB);
   const scheduleId = crypto.randomUUID();
 
-  const intervalValue = interval ? Number(interval) : null;
-  const durationValue = duration ? Number(duration) : null;
+  const intervalValue = interval ?? null;
+  const durationValue = duration ?? null;
 
   const settings = await db
     .select()
@@ -213,7 +221,7 @@ async function handleRecruitCommand(
     guildId,
     channelId,
     creatorId,
-    postTimeHHmm: String(postTime),
+    postTimeHHmm: post_time,
     intervalMin: resolvedInterval,
     durationMin: resolvedDuration,
     template: resolvedTemplate,
@@ -223,7 +231,7 @@ async function handleRecruitCommand(
   return c.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: {
-      content: `スケジュールを作成しました: ${postTime} (間隔 ${resolvedInterval}分 / ${resolvedDuration}分)`,
+      content: `スケジュールを作成しました: ${post_time} (間隔 ${resolvedInterval}分 / ${resolvedDuration}分)`,
     },
   });
 }
@@ -233,8 +241,6 @@ async function handleSettingsCommand(
   body: InteractionBody,
 ): Promise<Response> {
   const guildId = body.guild_id ?? "";
-  const option = body.data?.options?.[0]?.options?.[0];
-  const timezoneValue = option?.value;
 
   if (!guildId) {
     return c.json({
@@ -245,27 +251,25 @@ async function handleSettingsCommand(
     });
   }
 
-  if (!timezoneValue) {
+  const optionsObj = Object.fromEntries(
+    (body.data?.options?.[0]?.options ?? []).map((opt) => [
+      opt.name,
+      opt.value,
+    ]),
+  );
+
+  const parsed = v.settingsOptionsSchema.safeParse(optionsObj);
+
+  if (!parsed.success) {
     return c.json({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
-        content: "エラー: timezoneパラメータは必須です",
+        content: parsed.error.issues[0].message,
       },
     });
   }
 
-  const timezone = String(timezoneValue);
-
-  try {
-    Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
-  } catch {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: "無効なタイムゾーンです",
-      },
-    });
-  }
+  const { timezone } = parsed.data;
 
   const db = drizzle(c.env.DB);
 
@@ -351,24 +355,27 @@ async function handleRiotAccountAdd(
     });
   }
 
-  const gameNameOption = options.find((opt) => opt.name === "game_name");
-  const tagLineOption = options.find((opt) => opt.name === "tag_line");
+  const optionsObj = Object.fromEntries(
+    options.map((opt) => [opt.name, opt.value]),
+  );
 
-  const gameName = gameNameOption?.value;
-  const tagLine = tagLineOption?.value;
+  const parsed = v.riotAccountAddOptionsSchema.safeParse(optionsObj);
 
-  if (!gameName || !tagLine) {
+  if (!parsed.success) {
+    const firstError = parsed.error.issues[0];
     return c.json({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
-        content: "エラー: game_nameとtag_lineは必須です",
+        content: firstError.message,
       },
     });
   }
 
+  const { game_name, tag_line, region } = parsed.data;
+
   // Riot ID のバリデーション（#を含む場合は分割）
-  let finalGameName = String(gameName);
-  let finalTagLine = String(tagLine);
+  let finalGameName = game_name;
+  let finalTagLine = tag_line;
 
   if (finalGameName.includes("#")) {
     const [name, tag] = finalGameName.split("#");
@@ -381,6 +388,7 @@ async function handleRiotAccountAdd(
     finalGameName,
     finalTagLine,
     c.env.HENRIKDEV_API_KEY,
+    region,
   );
 
   if (!rankResult.success || !rankResult.account) {
@@ -401,6 +409,7 @@ async function handleRiotAccountAdd(
     userId,
     gameName: finalGameName,
     tagLine: finalTagLine,
+    region,
     rank: rankResult.account.rank?.rank ?? "Unrated",
     createdAtUtc: nowUtc,
   });
@@ -429,30 +438,41 @@ async function handleRiotAccountRemove(
     });
   }
 
-  const gameNameOption = options.find((opt) => opt.name === "game_name");
-  const tagLineOption = options.find((opt) => opt.name === "tag_line");
+  const optionsObj = Object.fromEntries(
+    options.map((opt) => [opt.name, opt.value]),
+  );
 
-  const gameName = gameNameOption?.value;
-  const tagLine = tagLineOption?.value;
+  const parsed = v.riotAccountRemoveOptionsSchema.safeParse(optionsObj);
+
+  if (!parsed.success) {
+    return c.json({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        content: parsed.error.issues[0].message,
+      },
+    });
+  }
+
+  const { game_name, tag_line } = parsed.data;
 
   const db = drizzle(c.env.DB);
 
-  if (gameName && tagLine) {
+  if (game_name && tag_line) {
     // 特定のアカウントを削除
     await db
       .delete(riotAccounts)
       .where(
         and(
           eq(riotAccounts.userId, userId),
-          eq(riotAccounts.gameName, String(gameName)),
-          eq(riotAccounts.tagLine, String(tagLine)),
+          eq(riotAccounts.gameName, game_name),
+          eq(riotAccounts.tagLine, tag_line),
         ),
       );
 
     return c.json({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
-        content: `アカウントを削除しました: ${gameName}#${tagLine}`,
+        content: `アカウントを削除しました: ${game_name}#${tag_line}`,
       },
     });
   }
@@ -891,6 +911,15 @@ async function recomputeMatch(
 
   const postTimeHHmm = schedule?.postTimeHHmm ?? "20:00";
 
+  // guildSettings を取得してタイムゾーンを取得
+  const settings = await db
+    .select()
+    .from(guildSettings)
+    .where(eq(guildSettings.guildId, recruit.guildId))
+    .get();
+
+  const timezone = settings?.timezone ?? "Asia/Tokyo";
+
   // 参加状況を計算
   const confirmedCount = entries.filter(
     (entry) => entry.state === "confirmed",
@@ -995,7 +1024,7 @@ async function recomputeMatch(
       pendingCount,
       matchedMembers: bestParty.memberIds,
       matchedTime: new Date(bestParty.meetTimeUtc).toLocaleTimeString("ja-JP", {
-        timeZone: "Asia/Tokyo",
+        timeZone: timezone,
         hour: "2-digit",
         minute: "2-digit",
       }),
