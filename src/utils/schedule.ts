@@ -34,14 +34,12 @@ export function shouldCreateInstance(
     nowStartOfDayUtc.getTime() + hours * 3600000 + minutes * 60000,
   );
 
-  if (postTimeDate.getTime() > nowUtc.getTime()) {
-    return true;
-  }
-
+  // 過去の時刻の場合は作成しない
   if (postTimeDate.getTime() <= nowUtc.getTime()) {
     return false;
   }
 
+  // 重複チェック
   const targetDateLocal = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
   const alreadyExists = existingInstances.some(

@@ -54,6 +54,7 @@ export const riotAccounts = sqliteTable("riot_accounts", {
   userId: text("user_id").notNull(),
   gameName: text("game_name").notNull(),
   tagLine: text("tag_line").notNull(),
+  region: text("region").notNull().default("na"),
   rank: text("rank").notNull(),
   createdAtUtc: text("created_at_utc").notNull(),
 });
