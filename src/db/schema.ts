@@ -1,4 +1,4 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const guildSettings = sqliteTable("guild_settings", {
   id: text("id").primaryKey(),
@@ -38,7 +38,9 @@ export const recruits = sqliteTable("recruits", {
 });
 
 export const recruitEntries = sqliteTable("recruit_entries", {
-  recruitId: text("recruit_id").notNull().references(() => recruits.id, { onDelete: "cascade" }),
+  recruitId: text("recruit_id")
+    .notNull()
+    .references(() => recruits.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull(),
   state: text("state").notNull().default("pending_time"),
   availableFromUtc: text("available_from_utc"),

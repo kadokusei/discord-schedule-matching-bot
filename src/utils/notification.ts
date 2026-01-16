@@ -35,7 +35,10 @@ export function diffMatch(prev: Match | null, next: Match | null): Diff {
   return { type: "unchanged", memberDiff: null, timeDiff: null };
 }
 
-function computeMemberDiff(prevIds: string[], nextIds: string[]): { removed: string[]; added: string[] } | null {
+function computeMemberDiff(
+  prevIds: string[],
+  nextIds: string[],
+): { removed: string[]; added: string[] } | null {
   const removed = prevIds.filter((id) => !nextIds.includes(id));
   const added = nextIds.filter((id) => !prevIds.includes(id));
 
@@ -46,7 +49,10 @@ function computeMemberDiff(prevIds: string[], nextIds: string[]): { removed: str
   return { removed, added };
 }
 
-function computeTimeDiff(prevTime: string, nextTime: string): { prev: string; next: string } | null {
+function computeTimeDiff(
+  prevTime: string,
+  nextTime: string,
+): { prev: string; next: string } | null {
   if (prevTime === nextTime) {
     return null;
   }
@@ -62,7 +68,11 @@ function utcToHHmm(utc: string): string {
   return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
 }
 
-export function formatNotification(diff: Diff, match: Match | null, tz: string): string {
+export function formatNotification(
+  diff: Diff,
+  match: Match | null,
+  tz: string,
+): string {
   if (diff.type === "created" && match) {
     const members = match.memberIds.map((id) => `@${id}`).join(" ");
     const time = utcToHHmm(match.meetTimeUtc);
@@ -84,14 +94,26 @@ export function formatNotification(diff: Diff, match: Match | null, tz: string):
       timePart = `集合時刻: ${diff.timeDiff.prev} → ${diff.timeDiff.next}`;
     }
     const both = memberPart && timePart ? " / " : "";
-    const suffix = diff.memberDiff && !diff.timeDiff ? ` 集合 ${utcToHHmm(match?.meetTimeUtc ?? "")}` : "";
-    const memberSuffix = diff.memberDiff ? `/ ` : "";
-    const bothSuffix = diff.memberDiff && diff.timeDiff ? ` 集合 ${diff.timeDiff.prev}→${diff.timeDiff.next}` : "";
+    const suffix =
+      diff.memberDiff && !diff.timeDiff
+        ? ` 集合 ${utcToHHmm(match?.meetTimeUtc ?? "")}`
+        : "";
+    const memberSuffix = diff.memberDiff ? "/ " : "";
+    const bothSuffix =
+      diff.memberDiff && diff.timeDiff
+        ? ` 集合 ${diff.timeDiff.prev}→${diff.timeDiff.next}`
+        : "";
 
-    const finalSuffix = diff.memberDiff && diff.timeDiff ? bothSuffix : (diff.memberDiff ? (suffix.startsWith(" ") ? memberSuffix + suffix.slice(1) : memberSuffix + suffix) : "/ 集合 " + suffix);
+    const finalSuffix =
+      diff.memberDiff && diff.timeDiff
+        ? bothSuffix
+        : diff.memberDiff
+          ? suffix.startsWith(" ")
+            ? memberSuffix + suffix.slice(1)
+            : memberSuffix + suffix
+          : `/ 集合 ${suffix}`;
 
     return `【更新】${memberPart}${both}${timePart}${diff.timeDiff && !diff.memberDiff ? "（メンバーは同じ）" : ""}${finalSuffix}`;
-
   }
 
   if (diff.type === "unchanged") {

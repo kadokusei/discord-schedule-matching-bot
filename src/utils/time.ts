@@ -3,32 +3,40 @@ export interface TimeOption {
   value: string;
 }
 
-function localDateTimeToUtc(dateLocal: string, timeHHmm: string, tz: string): Date {
+function localDateTimeToUtc(
+  dateLocal: string,
+  timeHHmm: string,
+  tz: string,
+): Date {
+  const [year, month, day] = dateLocal.split("-").map(Number);
   const [hours, minutes] = timeHHmm.split(":").map(Number);
-  const dateTimeStr = `${dateLocal}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`;
 
-  const date = new Date(dateTimeStr);
+  // Create a date in UTC (treat local time as UTC first)
+  const utcDate = new Date(
+    Date.UTC(year, month - 1, day, hours, minutes, 0, 0),
+  );
 
+  // Get the timezone offset using Intl
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
+    timeZoneName: "longOffset",
   });
+  const parts = formatter.formatToParts(utcDate);
+  const timeZonePart = parts.find((p) => p.type === "timeZoneName");
+  const offsetString = timeZonePart?.value ?? "";
 
-  const parts = formatter.formatToParts(date);
+  // Parse offset like "GMT+09:00"
+  const match = offsetString.match(/GMT([+-])(\d{2}):(\d{2})/);
+  let offsetMinutes = 0;
+  if (match) {
+    const sign = match[1] === "+" ? 1 : -1;
+    const offsetHours = Number.parseInt(match[2], 10);
+    const offsetMins = Number.parseInt(match[3], 10);
+    offsetMinutes = sign * (offsetHours * 60 + offsetMins);
+  }
 
-  const year = Number(parts.find((p) => p.type === "year")?.value);
-  const month = Number(parts.find((p) => p.type === "month")?.value) - 1;
-  const day = Number(parts.find((p) => p.type === "day")?.value);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value);
-  const minute = Number(parts.find((p) => p.type === "minute")?.value);
-
-  return new Date(Date.UTC(year, month, day, hour, minute, 0, 0));
+  // Adjust UTC date by subtracting timezone offset
+  return new Date(utcDate.getTime() - offsetMinutes * 60 * 1000);
 }
 
 export function buildTimeOptions(
@@ -45,7 +53,15 @@ export function buildTimeOptions(
 
   for (let i = 0; i < totalOptions; i++) {
     const date = new Date(baseDate.getTime() + i * intervalMin * 60 * 1000);
-    const label = `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+
+    // Get time in the specified timezone for the label
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const label = formatter.format(date);
     const value = date.toISOString();
     options.push({ label, value });
   }

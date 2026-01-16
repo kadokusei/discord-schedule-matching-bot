@@ -8,7 +8,12 @@ describe("shouldCreateInstance", () => {
     const tz = "Asia/Tokyo";
     const existingInstances = [];
 
-    const result = shouldCreateInstance(nowUtc, schedule, tz, existingInstances);
+    const result = shouldCreateInstance(
+      nowUtc,
+      schedule,
+      tz,
+      existingInstances,
+    );
 
     expect(result).toBe(true);
   });
@@ -19,7 +24,12 @@ describe("shouldCreateInstance", () => {
     const tz = "Asia/Tokyo";
     const existingInstances = [];
 
-    const result = shouldCreateInstance(nowUtc, schedule, tz, existingInstances);
+    const result = shouldCreateInstance(
+      nowUtc,
+      schedule,
+      tz,
+      existingInstances,
+    );
 
     expect(result).toBe(true);
   });
@@ -30,7 +40,12 @@ describe("shouldCreateInstance", () => {
     const tz = "Asia/Tokyo";
     const existingInstances = [{ targetDateLocal: "2026-01-16" }];
 
-    const result = shouldCreateInstance(nowUtc, schedule, tz, existingInstances);
+    const result = shouldCreateInstance(
+      nowUtc,
+      schedule,
+      tz,
+      existingInstances,
+    );
 
     expect(result).toBe(true);
   });

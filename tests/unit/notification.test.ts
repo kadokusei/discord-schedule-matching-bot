@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { diffMatch, formatNotification, matchSignature } from "../../src/utils/notification.js";
+import {
+  diffMatch,
+  formatNotification,
+  matchSignature,
+} from "../../src/utils/notification.js";
 
 describe("diffMatch", () => {
   it("should detect created when no previous match", () => {
@@ -113,7 +117,9 @@ describe("formatNotification", () => {
 
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
-    expect(result).toBe("【確定】@user1 @user2 @user3 @user4 @user5 集合 21:00");
+    expect(result).toBe(
+      "【確定】@user1 @user2 @user3 @user4 @user5 集合 21:00",
+    );
   });
 
   it("should format member change notification", () => {
