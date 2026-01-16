@@ -1,0 +1,27 @@
+{
+  "name": "discord-schedule-matching-bot",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "discord-interactions": "^4.4.0",
+    "discord-api-types": "^0.37.109",
+    "hono": "^4.6.10",
+    "drizzle-orm": "^0.45.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.12.4",
+    "drizzle-kit": "^0.30.1",
+    "vitest": "^3.2.4",
+    "wrangler": "^3.92.0",
+    "typescript": "^5.7.2"
+  },
+  "type": "module"
+}
