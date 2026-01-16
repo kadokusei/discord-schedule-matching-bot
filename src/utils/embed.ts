@@ -30,7 +30,11 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
     },
   ];
 
-  if (params.status === "matched" && params.matchedMembers && params.matchedTime) {
+  if (
+    params.status === "matched" &&
+    params.matchedMembers &&
+    params.matchedTime
+  ) {
     fields.push({
       name: "マッチング結果",
       value: `集合時刻: ${params.matchedTime}\nメンバー: ${params.matchedMembers.map((id) => `<@${id}>`).join(", ")}`,
