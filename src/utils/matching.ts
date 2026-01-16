@@ -137,7 +137,13 @@ export function computeBestParty(entries: Entry[]): BestParty {
     }
   }
 
-  return best ?? { memberIds: [], meetTimeUtc: "1970-01-01T00:00:00.000Z", rankBalanceScore: 0 };
+  return (
+    best ?? {
+      memberIds: [],
+      meetTimeUtc: "1970-01-01T00:00:00.000Z",
+      rankBalanceScore: 0,
+    }
+  );
 }
 
 export function formatRankEvaluation(entries: Entry[]): string {
@@ -168,11 +174,7 @@ export function formatRankEvaluation(entries: Entry[]): string {
 
   const variance = calculateRankVariance(entries);
   const balanceRating =
-    variance < 10
-      ? "良好"
-      : variance < 30
-        ? "やや不平衡"
-        : "不平衡";
+    variance < 10 ? "良好" : variance < 30 ? "やや不平衡" : "不平衡";
 
   return `ランク構成: ${rankList}\nバランス評価: ${balanceRating}`;
 }
@@ -198,7 +200,11 @@ export function selectOptimalAccounts(
   for (let i = 0; i <= sortedAccounts.length - neededSlots; i++) {
     const combination = sortedAccounts.slice(i, i + neededSlots);
     const variance = calculateRankVariance(
-      combination.map((acc) => ({ userId: "dummy", availableFromUtc: "1970-01-01T00:00:00.000Z", rank: acc.rank })),
+      combination.map((acc) => ({
+        userId: "dummy",
+        availableFromUtc: "1970-01-01T00:00:00.000Z",
+        rank: acc.rank,
+      })),
     );
 
     if (variance < minVariance) {
@@ -207,5 +213,7 @@ export function selectOptimalAccounts(
     }
   }
 
-  return bestCombination.map((_, i) => `${userId}-${sortedAccounts.indexOf(bestCombination[0]) + i}`);
+  return bestCombination.map(
+    (_, i) => `${userId}-${sortedAccounts.indexOf(bestCombination[0]) + i}`,
+  );
 }
