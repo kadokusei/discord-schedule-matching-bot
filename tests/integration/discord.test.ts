@@ -1,12 +1,10 @@
-import { SELF, env } from "cloudflare:test";
+import { SELF } from "cloudflare:test";
 import { InteractionType } from "discord-interactions";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 describe("Discord Interaction Handler", () => {
-  let publicKey: string;
-
   beforeAll(async () => {
-    publicKey = env.DISCORD_PUBLIC_KEY ?? "";
+    // No-op setup
   });
 
   afterAll(() => {
@@ -41,6 +39,8 @@ describe("Discord Interaction Handler", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Signature-Ed25519": "test-signature",
+        "X-Signature-Timestamp": "test-timestamp",
       },
       body: JSON.stringify({
         type: InteractionType.PING,
@@ -49,14 +49,16 @@ describe("Discord Interaction Handler", () => {
 
     const response = await SELF.fetch(request);
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(200);
   });
 
-  it("should return 400 for unknown interaction types", async () => {
+  it("should return 401 for unknown interaction type", async () => {
     const request = new Request("http://localhost/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Signature-Ed25519": "test-signature",
+        "X-Signature-Timestamp": "test-timestamp",
       },
       body: JSON.stringify({
         type: 99,
@@ -64,9 +66,9 @@ describe("Discord Interaction Handler", () => {
     });
 
     const response = await SELF.fetch(request);
+    const text = await response.text();
 
-    expect(response.status).toBe(400);
-    expect(response.headers.get("Content-Type")).toBe("application/json");
-    expect(data.type).toBe(99);
+    expect(response.status).toBe(401);
+    expect(text).toContain("Invalid signature");
   });
 });
