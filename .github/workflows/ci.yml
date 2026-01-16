@@ -33,10 +33,10 @@ jobs:
         run: bun install
 
       - name: Run lint
-        run: biome lint src/ tests/
+        run: bun run lint
 
       - name: Run format check
-        run: biome format src/ tests/
+        run: bun run format:check
 
       - name: Run tests
         run: bun vitest --run
