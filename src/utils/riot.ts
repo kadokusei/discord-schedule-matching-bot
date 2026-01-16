@@ -20,10 +20,11 @@ export async function fetchValorantRank(
   gameName: string,
   tagLine: string,
   apiKey: string,
+  region = "na",
 ): Promise<FetchRankResult> {
   try {
     const response = await fetch(
-      `https://api.henrikdev.xyz/valorant/v1/mmr/na/${gameName}/${tagLine}`,
+      `https://api.henrikdev.xyz/valorant/v1/mmr/${region}/${gameName}/${tagLine}`,
       {
         headers: {
           Authorization: apiKey,
