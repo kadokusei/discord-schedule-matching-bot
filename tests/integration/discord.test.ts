@@ -1,12 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { SELF, env } from "cloudflare:test";
 import { InteractionType } from "discord-interactions";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 describe("Discord Interaction Handler", () => {
   let publicKey: string;
 
   beforeAll(async () => {
-    // Get public key from env (in tests, this will be set in vitest config)
     publicKey = env.DISCORD_PUBLIC_KEY ?? "";
   });
 
@@ -15,10 +14,6 @@ describe("Discord Interaction Handler", () => {
   });
 
   it("should respond to PING interaction with PONG", async () => {
-    // For PING test, we need to generate a valid signature
-    // Since generating a valid signature requires the private key,
-    // we'll skip signature verification for PING in tests
-    // This is acceptable since PING is safe to process
     const pingRequest = new Request("http://localhost/", {
       method: "POST",
       headers: {
@@ -27,7 +22,7 @@ describe("Discord Interaction Handler", () => {
         "X-Signature-Timestamp": "test-timestamp",
       },
       body: JSON.stringify({
-        type: InteractionType.PING, // PING
+        type: InteractionType.PING,
       }),
     });
 
@@ -59,7 +54,7 @@ describe("Discord Interaction Handler", () => {
 
   it("should reject requests with invalid signature", async () => {
     const request = new Request("http://localhost/", {
-      method: "POST",
+      method: "",
       headers: {
         "Content-Type": "application/json",
         "X-Signature-Ed25519": "invalid-signature",
@@ -73,5 +68,23 @@ describe("Discord Interaction Handler", () => {
     const response = await SELF.fetch(request);
 
     expect(response.status).toBe(401);
+  });
+
+  it("should return 400 for unknown interaction type", async () => {
+    const request = new Request("http://localhost/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Signature-Ed25519": "test-signature",
+        "X-Singature-Timestamp": "test-timestamp",
+      },
+      body: JSON.stringify({
+        type: 3, // Unknown type
+      }),
+    });
+
+    const response = await SELF.fetch(request);
+
+    expect(response.status).toBe(400);
   });
 });
