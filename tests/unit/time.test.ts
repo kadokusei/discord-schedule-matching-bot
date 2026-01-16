@@ -19,10 +19,12 @@ describe("buildTimeOptions", () => {
 
     expect(result).toHaveLength(13);
 
-    result.forEach((option) => {
+    for (const option of result) {
       expect(option.label).toMatch(/^\d{2}:\d{2}$/);
-      expect(option.value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    });
+      expect(option.value).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      );
+    }
   });
 
   it("should handle date crossing correctly", () => {

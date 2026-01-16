@@ -30,7 +30,9 @@ export function shouldCreateInstance(
   const day = Number(nowParts.find((p) => p.type === "day")?.value);
 
   const nowStartOfDayUtc = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
-  const postTimeDate = new Date(nowStartOfDayUtc.getTime() + hours * 3600000 + minutes * 60000);
+  const postTimeDate = new Date(
+    nowStartOfDayUtc.getTime() + hours * 3600000 + minutes * 60000,
+  );
 
   if (postTimeDate.getTime() > nowUtc.getTime()) {
     return true;
@@ -43,7 +45,7 @@ export function shouldCreateInstance(
   const targetDateLocal = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
   const alreadyExists = existingInstances.some(
-    (inst) => inst.targetDateLocal === targetDateLocal
+    (inst) => inst.targetDateLocal === targetDateLocal,
   );
 
   if (alreadyExists) {
@@ -52,4 +54,3 @@ export function shouldCreateInstance(
 
   return true;
 }
-

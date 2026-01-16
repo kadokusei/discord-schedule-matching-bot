@@ -13,41 +13,41 @@ function combinations<T>(arr: T[], k: number): T[][] {
   if (arr.length === 0) return [];
 
   const [first, ...rest] = arr;
-  const combsWithFirst = combinations(rest, k - 1).map((comb) => [first, ...comb]);
+  const combsWithFirst = combinations(rest, k - 1).map((comb) => [
+    first,
+    ...comb,
+  ]);
   const combsWithoutFirst = combinations(rest, k);
 
   return [...combsWithFirst, ...combsWithoutFirst];
 }
 
 function sumAvailableFrom(entries: Entry[]): number {
-  return entries.reduce((sum, e) => sum + new Date(e.availableFromUtc).getTime(), 0);
+  return entries.reduce(
+    (sum, e) => sum + new Date(e.availableFromUtc).getTime(),
+    0,
+  );
 }
 
 export function computeBestParty(entries: Entry[]): BestParty {
   if (entries.length <= 5) {
     const memberIds = entries.map((e) => e.userId);
-    const meetTime = entries.reduce(
-      (latest, e) => {
-        const t = new Date(e.availableFromUtc);
-        return t.getTime() > latest.getTime() ? t : latest;
-      },
-      new Date("1970-01-01T00:00:00.000Z"),
-    );
+    const meetTime = entries.reduce((latest, e) => {
+      const t = new Date(e.availableFromUtc);
+      return t.getTime() > latest.getTime() ? t : latest;
+    }, new Date("1970-01-01T00:00:00.000Z"));
     return { memberIds, meetTimeUtc: meetTime.toISOString() };
   }
 
   let best: BestParty | null = null;
-  let bestMeetTime = Infinity;
-  let bestSum = Infinity;
+  let bestMeetTime = Number.POSITIVE_INFINITY;
+  let bestSum = Number.POSITIVE_INFINITY;
 
   for (const combo of combinations(entries, 5)) {
-    const meetTime = combo.reduce(
-      (latest, e) => {
-        const t = new Date(e.availableFromUtc);
-        return t.getTime() > latest.getTime() ? t : latest;
-      },
-      new Date("1970-01-01T00:00:00.000Z"),
-    );
+    const meetTime = combo.reduce((latest, e) => {
+      const t = new Date(e.availableFromUtc);
+      return t.getTime() > latest.getTime() ? t : latest;
+    }, new Date("1970-01-01T00:00:00.000Z"));
 
     const meetTimeValue = meetTime.getTime();
 
