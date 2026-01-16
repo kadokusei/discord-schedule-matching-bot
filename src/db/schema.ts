@@ -7,6 +7,7 @@ export const guildSettings = sqliteTable("guild_settings", {
   defaultIntervalMin: integer("default_interval_min").notNull().default(30),
   defaultDurationMin: integer("default_duration_min").notNull().default(360),
   defaultTemplate: text("default_template").notNull().default(""),
+  reminderIntervalMin: integer("reminder_interval_min"),
 });
 
 export const schedules = sqliteTable("schedules", {
@@ -48,7 +49,17 @@ export const recruitEntries = sqliteTable("recruit_entries", {
   lastRemindedAtUtc: text("last_reminded_at_utc"),
 });
 
+export const riotAccounts = sqliteTable("riot_accounts", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  gameName: text("game_name").notNull(),
+  tagLine: text("tag_line").notNull(),
+  rank: text("rank").notNull(),
+  createdAtUtc: text("created_at_utc").notNull(),
+});
+
 export type GuildSetting = typeof guildSettings.$inferSelect;
 export type Schedule = typeof schedules.$inferSelect;
 export type Recruit = typeof recruits.$inferSelect;
 export type RecruitEntry = typeof recruitEntries.$inferSelect;
+export type RiotAccount = typeof riotAccounts.$inferSelect;
