@@ -23,7 +23,7 @@ interface InteractionBody {
   data?: CommandData;
 }
 
-const app = new Hono<{ Bindings: Env }>();
+  const app = new Hono<{ Bindings: Env<{ DISCORD_PUBLIC_KEY: string } }>();
 
 async function verifyRequest(
   request: Request,
