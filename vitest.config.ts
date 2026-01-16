@@ -1,7 +1,20 @@
-import { defineConfig } from "vitest/config";
+import { defineWorkersConfig } from "@cloudflare/vitest-pool-workers/config";
 
-export default defineConfig({
+export default defineWorkersConfig({
   test: {
-    pool: "forks",
+    pool: "@cloudflare/vitest-pool-workers",
+    poolOptions: {
+      workers: {
+        singleWorker: true,
+        wrangler: {
+          configPath: "./wrangler.toml",
+        },
+        miniflare: {
+          bindings: {
+            DISCORD_PUBLIC_KEY: "test-public-key",
+          },
+        },
+      },
+    },
   },
 });
