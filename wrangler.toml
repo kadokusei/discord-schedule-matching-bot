@@ -3,7 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 [env.development]
-vars = { ENVIRONMENT = "development", DISCORD_BOT_TOKEN = "" }
+vars = { ENVIRONMENT = "development", DISCORD_BOT_TOKEN = "", HENRIKDEV_API_KEY = "" }
 
 [[env.development.d1_databases]]
 binding = "DB"
@@ -11,7 +11,7 @@ database_name = "development-db"
 database_id = "local"
 
 [env.production]
-vars = { ENVIRONMENT = "production", DISCORD_BOT_TOKEN = "" }
+vars = { ENVIRONMENT = "production", DISCORD_BOT_TOKEN = "", HENRIKDEV_API_KEY = "" }
 
 [[env.production.d1_databases]]
 binding = "DB"
