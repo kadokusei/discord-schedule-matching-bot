@@ -25,16 +25,10 @@ import {
   formatNotification,
   matchSignature,
 } from "./utils/notification";
-import {
-  formatRankLabel,
-  fetchValorantRank,
-} from "./utils/riot";
+import { formatRankLabel, fetchValorantRank } from "./utils/riot";
 import { buildTimeOptions } from "./utils/time";
 import { shouldCreateInstance } from "./utils/schedule";
-import {
-  buildReminderMessage,
-  filterPendingReminders,
-} from "./utils/reminder";
+import { buildReminderMessage, filterPendingReminders } from "./utils/reminder";
 
 interface Env {
   DISCORD_PUBLIC_KEY: string;
@@ -461,17 +455,16 @@ async function handleRiotAccountRemove(
         content: `アカウントを削除しました: ${gameName}#${tagLine}`,
       },
     });
-  } else {
-    // 全てのアカウントを削除
-    await db.delete(riotAccounts).where(eq(riotAccounts.userId, userId));
-
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: "全てのアカウントを削除しました",
-      },
-    });
   }
+  // 全てのアカウントを削除
+  await db.delete(riotAccounts).where(eq(riotAccounts.userId, userId));
+
+  return c.json({
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: {
+      content: "全てのアカウントを削除しました",
+    },
+  });
 }
 
 async function handleRiotAccountList(
@@ -507,9 +500,7 @@ async function handleRiotAccountList(
   }
 
   const accountList = accounts
-    .map(
-      (acc) => `- ${acc.gameName}#${acc.tagLine} (${acc.rank})`,
-    )
+    .map((acc) => `- ${acc.gameName}#${acc.tagLine} (${acc.rank})`)
     .join("\n");
 
   return c.json({
@@ -624,8 +615,10 @@ async function handleJoinComponent(
     .where(eq(guildSettings.guildId, recruit.guildId))
     .get();
 
-  const intervalMin = schedule?.intervalMin ?? settings?.defaultIntervalMin ?? 30;
-  const durationMin = schedule?.durationMin ?? settings?.defaultDurationMin ?? 360;
+  const intervalMin =
+    schedule?.intervalMin ?? settings?.defaultIntervalMin ?? 30;
+  const durationMin =
+    schedule?.durationMin ?? settings?.defaultDurationMin ?? 360;
   const timezone = settings?.timezone ?? "Asia/Tokyo";
 
   // 時間オプションを生成
@@ -748,6 +741,22 @@ async function handleTimeSelect(
   const db = drizzle(c.env.DB);
   const nowUtc = new Date().toISOString();
 
+  // recruit を取得して guildId を取得
+  const recruit = await db
+    .select()
+    .from(recruits)
+    .where(eq(recruits.id, recruitId))
+    .get();
+
+  // guildSettings を取得
+  const settings = await db
+    .select()
+    .from(guildSettings)
+    .where(eq(guildSettings.guildId, recruit?.guildId ?? ""))
+    .get();
+
+  const timezone = settings?.timezone ?? "Asia/Tokyo";
+
   await db
     .insert(recruitEntries)
     .values({
@@ -771,7 +780,7 @@ async function handleTimeSelect(
   return c.json({
     type: InteractionResponseType.UPDATE_MESSAGE,
     data: {
-      content: `希望時間を登録しました: ${new Date(selectedTime).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}`,
+      content: `希望時間を登録しました: ${new Date(selectedTime).toLocaleString("ja-JP", { timeZone: timezone })}`,
       components: [],
     },
   });
@@ -927,27 +936,36 @@ async function recomputeMatch(
       .where(eq(recruits.id, recruitId));
 
     // Embed を更新
-    await updateDiscordMessage(
-      c.env,
-      recruit.channelId,
-      recruit.messageId,
-      {
+    try {
+      await updateDiscordMessage(c.env, recruit.channelId, recruit.messageId, {
         targetDateLocal: recruit.targetDateLocal,
         postTimeHHmm,
         status: "open",
         confirmedCount,
         pendingCount,
-      },
-    );
+      });
+    } catch (error) {
+      console.error(
+        `Failed to update Discord message for recruit ${recruitId}:`,
+        error,
+      );
+    }
 
     // ランク評価メッセージをチャンネルに送信
     if (confirmedEntries.length > 0) {
-      const rankEvaluation = formatRankEvaluation(confirmedEntries);
-      await postChannelMessage(
-        c.env,
-        recruit.channelId,
-        `【現在の参加状況】\n${rankEvaluation}`,
-      );
+      try {
+        const rankEvaluation = formatRankEvaluation(confirmedEntries);
+        await postChannelMessage(
+          c.env,
+          recruit.channelId,
+          `【現在の参加状況】\n${rankEvaluation}`,
+        );
+      } catch (error) {
+        console.error(
+          `Failed to send rank evaluation message for recruit ${recruitId}:`,
+          error,
+        );
+      }
     }
 
     await notifyMatchUpdate(c.env, recruit, previousMatch, null);
@@ -968,11 +986,8 @@ async function recomputeMatch(
     .where(eq(recruits.id, recruitId));
 
   // Embed を更新
-  await updateDiscordMessage(
-    c.env,
-    recruit.channelId,
-    recruit.messageId,
-    {
+  try {
+    await updateDiscordMessage(c.env, recruit.channelId, recruit.messageId, {
       targetDateLocal: recruit.targetDateLocal,
       postTimeHHmm,
       status: "matched",
@@ -984,8 +999,13 @@ async function recomputeMatch(
         hour: "2-digit",
         minute: "2-digit",
       }),
-    },
-  );
+    });
+  } catch (error) {
+    console.error(
+      `Failed to update Discord message for recruit ${recruitId}:`,
+      error,
+    );
+  }
 
   await notifyMatchUpdate(c.env, recruit, previousMatch, {
     memberIds: bestParty.memberIds,
@@ -1000,12 +1020,18 @@ function buildMatchFromRecruit(
     return null;
   }
 
-  const memberIds = JSON.parse(recruit.matchedMemberIdsJson) as string[];
-
-  return {
-    memberIds,
-    meetTimeUtc: recruit.matchedMeetTimeUtc,
-  };
+  try {
+    const memberIds = JSON.parse(recruit.matchedMemberIdsJson) as string[];
+    if (!Array.isArray(memberIds)) {
+      return null;
+    }
+    return {
+      memberIds,
+      meetTimeUtc: recruit.matchedMeetTimeUtc,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function notifyMatchUpdate(
@@ -1176,9 +1202,7 @@ async function handleScheduled(env: Env): Promise<void> {
       .where(inArray(recruits.id, recruitIds))
       .all();
 
-    const recruitsByRecruitId = new Map(
-      recruitsData.map((r) => [r.id, r]),
-    );
+    const recruitsByRecruitId = new Map(recruitsData.map((r) => [r.id, r]));
 
     // 各ギルドの設定を取得
     const guildIds = recruitsData.map((r) => r.guildId);
@@ -1200,7 +1224,8 @@ async function handleScheduled(env: Env): Promise<void> {
         channelId: recruitsByRecruitId.get(entry.recruitId)?.channelId ?? "",
         lastRemindedAtUtc: entry.lastRemindedAtUtc,
       })),
-      settingsByGuildId.get(recruitsData[0]?.guildId ?? "")?.reminderIntervalMin,
+      settingsByGuildId.get(recruitsData[0]?.guildId ?? "")
+        ?.reminderIntervalMin,
       nowUtc,
     );
 
@@ -1211,21 +1236,33 @@ async function handleScheduled(env: Env): Promise<void> {
 
       const reminderMessage = buildReminderMessage(target.recruitId);
 
-      // チャンネルメンションで通知
-      await postChannelMessage(env, target.channelId, `<@${target.userId}> ${reminderMessage}`);
-
-      // リマインド時刻を更新
-      await db
-        .update(recruitEntries)
-        .set({
-          lastRemindedAtUtc: nowUtc.toISOString(),
-        })
-        .where(
-          and(
-            eq(recruitEntries.recruitId, target.recruitId),
-            eq(recruitEntries.userId, target.userId),
-          ),
+      try {
+        // チャンネルメンションで通知
+        await postChannelMessage(
+          env,
+          target.channelId,
+          `<@${target.userId}> ${reminderMessage}`,
         );
+
+        // メッセージ送信成功後のみリマインド時刻を更新
+        await db
+          .update(recruitEntries)
+          .set({
+            lastRemindedAtUtc: nowUtc.toISOString(),
+          })
+          .where(
+            and(
+              eq(recruitEntries.recruitId, target.recruitId),
+              eq(recruitEntries.userId, target.userId),
+            ),
+          );
+      } catch (error) {
+        // リマインド送信失敗時はログに出力して、次のターゲットに進む
+        console.error(
+          `Failed to send reminder to user ${target.userId} in recruit ${target.recruitId}:`,
+          error,
+        );
+      }
     }
   }
 }
