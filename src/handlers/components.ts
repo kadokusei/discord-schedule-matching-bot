@@ -208,6 +208,7 @@ async function handleTimeComponent(
       userId,
       state: "confirmed",
       availableFromUtc: payload,
+      createdAtUtc: nowUtc,
       updatedAtUtc: nowUtc,
     })
     .onConflictDoUpdate({
@@ -273,6 +274,7 @@ async function handleTimeSelect(
       userId,
       state: "confirmed",
       availableFromUtc: selectedTime,
+      createdAtUtc: nowUtc,
       updatedAtUtc: nowUtc,
     })
     .onConflictDoUpdate({

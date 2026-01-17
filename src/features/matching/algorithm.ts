@@ -173,6 +173,7 @@ export function selectOptimalAccounts(
         userId: "dummy",
         availableFromUtc: "1970-01-01T00:00:00.000Z",
         rank: acc.rank,
+        createdAtUtc: "1970-01-01T00:00:00.000Z",
       })),
     );
 
