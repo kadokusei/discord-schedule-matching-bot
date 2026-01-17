@@ -20,11 +20,12 @@ export async function fetchValorantRank(
   gameName: string,
   tagLine: string,
   apiKey: string,
-  region = "na",
+  region = "ap",
+  platform = "pc",
 ): Promise<FetchRankResult> {
   try {
     const response = await fetch(
-      `https://api.henrikdev.xyz/valorant/v1/mmr/${region}/${gameName}/${tagLine}`,
+      `https://api.henrikdev.xyz/valorant/v3/mmr/${region}/${platform}/${gameName}/${tagLine}`,
       {
         headers: {
           Authorization: apiKey,
@@ -43,10 +44,16 @@ export async function fetchValorantRank(
 
     const data = (await response.json()) as {
       data: {
-        name: string;
-        tag: string;
-        currenttier: number | null;
-        ranking_in_tier: number | null;
+        account: {
+          name: string;
+          tag: string;
+        };
+        current: {
+          tier: {
+            id: number;
+            name: string;
+          };
+        } | null;
       } | null;
     };
 
@@ -58,15 +65,14 @@ export async function fetchValorantRank(
       };
     }
 
-    const rank = data.data.currenttier
-      ? tierToRank(data.data.currenttier, data.data.ranking_in_tier ?? 0)
-      : null;
+    const currentTier = data.data.current?.tier?.id ?? null;
+    const rank = currentTier !== null ? tierToRank(currentTier, 0) : null;
 
     return {
       success: true,
       account: {
-        name: data.data.name,
-        tag: data.data.tag,
+        name: data.data.account.name,
+        tag: data.data.account.tag,
         rank,
       },
       error: null,
