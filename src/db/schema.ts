@@ -58,6 +58,13 @@ export const riotAccounts = sqliteTable("riot_accounts", {
   region: text("region").notNull().default("na"),
   rank: text("rank").notNull(),
   createdAtUtc: text("created_at_utc").notNull(),
+  lastFetchedAtUtc: text("last_fetched_at_utc").notNull(),
+});
+
+export const apiRateLimits = sqliteTable("api_rate_limits", {
+  id: text("id").primaryKey(),
+  apiName: text("api_name").notNull(),
+  requestedAtUtc: text("requested_at_utc").notNull(),
 });
 
 export type GuildSetting = typeof guildSettings.$inferSelect;

@@ -2,13 +2,9 @@ import { InteractionResponseType } from "discord-interactions";
 import type { Context } from "hono";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import {
-  guildSettings,
-  recruitEntries,
-  recruits,
-  schedules,
-} from "../db/schema";
+import * as schema from "../db/schema";
 import { deleteDiscordMessage } from "../features/discord";
+import { fetchValorantRankWithCache } from "../features/riot";
 import type { Env, InteractionBody } from "../lib/types";
 
 export async function handleComponentInteraction(
@@ -82,14 +78,14 @@ export async function handleJoinComponent(
   recruitId: string,
   userId: string,
 ): Promise<Response> {
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
   const nowUtc = new Date().toISOString();
 
   // recruit を取得して scheduleId を取得
   const recruit = await db
     .select()
-    .from(recruits)
-    .where(eq(recruits.id, recruitId))
+    .from(schema.recruits)
+    .where(eq(schema.recruits.id, recruitId))
     .get();
 
   if (!recruit) {
@@ -104,15 +100,15 @@ export async function handleJoinComponent(
   // schedule を取得
   const schedule = await db
     .select()
-    .from(schedules)
-    .where(eq(schedules.id, recruit.scheduleId))
+    .from(schema.schedules)
+    .where(eq(schema.schedules.id, recruit.scheduleId))
     .get();
 
-  // guildSettings を取得
+  // schema.guildSettings を取得
   const settings = await db
     .select()
-    .from(guildSettings)
-    .where(eq(guildSettings.guildId, recruit.guildId))
+    .from(schema.guildSettings)
+    .where(eq(schema.guildSettings.guildId, recruit.guildId))
     .get();
 
   const intervalMin =
@@ -133,7 +129,7 @@ export async function handleJoinComponent(
 
   // pending_time 状態で登録
   await db
-    .insert(recruitEntries)
+    .insert(schema.recruitEntries)
     .values({
       recruitId,
       userId,
@@ -142,7 +138,7 @@ export async function handleJoinComponent(
       updatedAtUtc: nowUtc,
     })
     .onConflictDoUpdate({
-      target: [recruitEntries.recruitId, recruitEntries.userId],
+      target: [schema.recruitEntries.recruitId, schema.recruitEntries.userId],
       set: {
         state: "pending_time",
         availableFromUtc: null,
@@ -154,6 +150,33 @@ export async function handleJoinComponent(
   await (async () => {
     const { recomputeMatch } = await import("./matching");
     await recomputeMatch(c, recruitId);
+  })();
+
+  // 参加時のランク更新（非同期で実行）
+  (async () => {
+    try {
+      // ユーザーのRiotアカウントを取得
+      const userAccounts = await db
+        .select()
+        .from(schema.riotAccounts)
+        .where(eq(schema.riotAccounts.userId, userId))
+        .all();
+
+      // 各アカウントのランクを更新（isJoining: trueで5分キャッシュ）
+      for (const account of userAccounts) {
+        await fetchValorantRankWithCache(
+          account.gameName,
+          account.tagLine,
+          userId,
+          db,
+          c.env.HENRIKDEV_API_KEY,
+          { isJoining: true },
+        );
+      }
+    } catch (error) {
+      // ランク更新に失敗しても参加処理には影響させない
+      console.error("Failed to update ranks on join:", error);
+    }
   })();
 
   // StringSelect メニューを含む UPDATE_MESSAGE レスポンスを返す
@@ -198,11 +221,11 @@ async function handleTimeComponent(
     });
   }
 
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
   const nowUtc = new Date().toISOString();
 
   await db
-    .insert(recruitEntries)
+    .insert(schema.recruitEntries)
     .values({
       recruitId,
       userId,
@@ -212,7 +235,7 @@ async function handleTimeComponent(
       updatedAtUtc: nowUtc,
     })
     .onConflictDoUpdate({
-      target: [recruitEntries.recruitId, recruitEntries.userId],
+      target: [schema.recruitEntries.recruitId, schema.recruitEntries.userId],
       set: {
         state: "confirmed",
         availableFromUtc: payload,
@@ -248,27 +271,27 @@ async function handleTimeSelect(
     });
   }
 
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
   const nowUtc = new Date().toISOString();
 
   // recruit を取得して guildId を取得
   const recruit = await db
     .select()
-    .from(recruits)
-    .where(eq(recruits.id, recruitId))
+    .from(schema.recruits)
+    .where(eq(schema.recruits.id, recruitId))
     .get();
 
-  // guildSettings を取得
+  // schema.guildSettings を取得
   const settings = await db
     .select()
-    .from(guildSettings)
-    .where(eq(guildSettings.guildId, recruit?.guildId ?? ""))
+    .from(schema.guildSettings)
+    .where(eq(schema.guildSettings.guildId, recruit?.guildId ?? ""))
     .get();
 
   const timezone = settings?.timezone ?? "Asia/Tokyo";
 
   await db
-    .insert(recruitEntries)
+    .insert(schema.recruitEntries)
     .values({
       recruitId,
       userId,
@@ -278,7 +301,7 @@ async function handleTimeSelect(
       updatedAtUtc: nowUtc,
     })
     .onConflictDoUpdate({
-      target: [recruitEntries.recruitId, recruitEntries.userId],
+      target: [schema.recruitEntries.recruitId, schema.recruitEntries.userId],
       set: {
         state: "confirmed",
         availableFromUtc: selectedTime,
@@ -305,14 +328,14 @@ async function handleCancelComponent(
   recruitId: string,
   userId: string,
 ): Promise<Response> {
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
 
   await db
-    .delete(recruitEntries)
+    .delete(schema.recruitEntries)
     .where(
       and(
-        eq(recruitEntries.recruitId, recruitId),
-        eq(recruitEntries.userId, userId),
+        eq(schema.recruitEntries.recruitId, recruitId),
+        eq(schema.recruitEntries.userId, userId),
       ),
     );
 
@@ -334,13 +357,13 @@ async function handleDeleteComponent(
   recruitId: string,
   userId: string,
 ): Promise<Response> {
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
   const nowUtc = new Date().toISOString();
 
   const recruit = await db
     .select()
-    .from(recruits)
-    .where(eq(recruits.id, recruitId))
+    .from(schema.recruits)
+    .where(eq(schema.recruits.id, recruitId))
     .get();
 
   if (!recruit) {
@@ -357,17 +380,17 @@ async function handleDeleteComponent(
   }
 
   await db
-    .update(recruits)
+    .update(schema.recruits)
     .set({
       deletedBy: userId,
       deletedAtUtc: nowUtc,
       status: "deleted",
     })
-    .where(eq(recruits.id, recruitId));
+    .where(eq(schema.recruits.id, recruitId));
 
   await db
-    .delete(recruitEntries)
-    .where(eq(recruitEntries.recruitId, recruitId));
+    .delete(schema.recruitEntries)
+    .where(eq(schema.recruitEntries.recruitId, recruitId));
 
   return c.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,

@@ -2,9 +2,8 @@ import { InteractionResponseType } from "discord-interactions";
 import type { Context } from "hono";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { guildSettings, riotAccounts, schedules } from "../db/schema";
-import { formatRankLabel } from "../features/riot";
-import { fetchValorantRank } from "../features/riot";
+import * as schema from "../db/schema";
+import { fetchValorantRankWithCache, formatRankLabel } from "../features/riot";
 import * as v from "../shared/validation";
 import type { Env, InteractionBody } from "../lib/types";
 
@@ -67,7 +66,7 @@ async function handleRecruitCommand(
     });
   }
 
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
   const scheduleId = crypto.randomUUID();
 
   const intervalValue = interval ?? null;
@@ -75,15 +74,15 @@ async function handleRecruitCommand(
 
   const settings = await db
     .select()
-    .from(guildSettings)
-    .where(eq(guildSettings.guildId, guildId))
+    .from(schema.guildSettings)
+    .where(eq(schema.guildSettings.guildId, guildId))
     .get();
 
   const resolvedInterval = intervalValue ?? settings?.defaultIntervalMin ?? 30;
   const resolvedDuration = durationValue ?? settings?.defaultDurationMin ?? 360;
   const resolvedTemplate = settings?.defaultTemplate ?? "";
 
-  await db.insert(schedules).values({
+  await db.insert(schema.schedules).values({
     id: scheduleId,
     guildId,
     channelId,
@@ -138,17 +137,17 @@ async function handleSettingsCommand(
 
   const { timezone } = parsed.data;
 
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
 
   await db
-    .insert(guildSettings)
+    .insert(schema.guildSettings)
     .values({
       id: crypto.randomUUID(),
       guildId,
       timezone,
     })
     .onConflictDoUpdate({
-      target: guildSettings.guildId,
+      target: schema.guildSettings.guildId,
       set: {
         timezone,
       },
@@ -250,12 +249,15 @@ async function handleRiotAccountAdd(
     finalTagLine = tag || finalTagLine;
   }
 
-  // HenrikDev API でランクを取得
-  const rankResult = await fetchValorantRank(
+  // HenrikDev API でランクを取得（キャッシュ・レートリミット付き）
+  const db = drizzle(c.env.DB, { schema });
+  const rankResult = await fetchValorantRankWithCache(
     finalGameName,
     finalTagLine,
+    userId,
+    db,
     c.env.HENRIKDEV_API_KEY,
-    region,
+    { isJoining: false },
   );
 
   if (!rankResult.success || !rankResult.account) {
@@ -267,24 +269,12 @@ async function handleRiotAccountAdd(
     });
   }
 
-  const db = drizzle(c.env.DB);
-  const nowUtc = new Date().toISOString();
-
-  // アカウントを登録
-  await db.insert(riotAccounts).values({
-    id: crypto.randomUUID(),
-    userId,
-    gameName: finalGameName,
-    tagLine: finalTagLine,
-    region,
-    rank: rankResult.account.rank?.rank ?? "Unrated",
-    createdAtUtc: nowUtc,
-  });
+  const cacheMessage = rankResult.fromCache ? " (キャッシュ)" : "";
 
   return c.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: {
-      content: `アカウントを登録しました: ${formatRankLabel(rankResult.account)}`,
+      content: `アカウントを登録しました${cacheMessage}: ${formatRankLabel(rankResult.account)}`,
     },
   });
 }
@@ -322,17 +312,17 @@ async function handleRiotAccountRemove(
 
   const { game_name, tag_line } = parsed.data;
 
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
 
   if (game_name && tag_line) {
     // 特定のアカウントを削除
     await db
-      .delete(riotAccounts)
+      .delete(schema.riotAccounts)
       .where(
         and(
-          eq(riotAccounts.userId, userId),
-          eq(riotAccounts.gameName, game_name),
-          eq(riotAccounts.tagLine, tag_line),
+          eq(schema.riotAccounts.userId, userId),
+          eq(schema.riotAccounts.gameName, game_name),
+          eq(schema.riotAccounts.tagLine, tag_line),
         ),
       );
 
@@ -344,7 +334,9 @@ async function handleRiotAccountRemove(
     });
   }
   // 全てのアカウントを削除
-  await db.delete(riotAccounts).where(eq(riotAccounts.userId, userId));
+  await db
+    .delete(schema.riotAccounts)
+    .where(eq(schema.riotAccounts.userId, userId));
 
   return c.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -369,12 +361,12 @@ async function handleRiotAccountList(
     });
   }
 
-  const db = drizzle(c.env.DB);
+  const db = drizzle(c.env.DB, { schema });
 
   const accounts = await db
     .select()
-    .from(riotAccounts)
-    .where(eq(riotAccounts.userId, userId))
+    .from(schema.riotAccounts)
+    .where(eq(schema.riotAccounts.userId, userId))
     .all();
 
   if (accounts.length === 0) {
