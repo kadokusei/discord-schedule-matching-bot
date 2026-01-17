@@ -1,66 +1,222 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  shouldSendReminder,
+  buildReminderMessage,
+  filterPendingReminders,
+} from "../../../../src/features/recruit";
 
-describe("shouldSendReminder - unit tests", () => {
-  // Inline implementation for testing (due to Cloudflare Workers pool limitations)
-  function shouldSendReminder(
-    entry: { lastRemindedAtUtc: string | null },
-    reminderIntervalMin: number | null | undefined,
-    nowUtc: Date,
-  ): boolean {
-    if (!entry.lastRemindedAtUtc) {
-      return true;
-    }
-
-    const intervalMs = (reminderIntervalMin ?? 60) * 60 * 1000;
-    const lastReminded = new Date(entry.lastRemindedAtUtc);
-    const elapsedMs = nowUtc.getTime() - lastReminded.getTime();
-
-    return elapsedMs >= intervalMs;
-  }
-
-  it("should return true when lastRemindedAtUtc is null", () => {
-    const entry = {
-      lastRemindedAtUtc: null,
-    };
-    const nowUtc = new Date("2026-01-17T12:00:00.000Z");
-
-    expect(shouldSendReminder(entry, 60, nowUtc)).toBe(true);
+describe("reminder functions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it("should use default interval of 60 minutes when reminderIntervalMin is null", () => {
-    const entry = {
-      lastRemindedAtUtc: "2026-01-17T11:00:00.000Z",
-    };
-    const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+  describe("shouldSendReminder", () => {
+    it("should return true when lastRemindedAtUtc is null", () => {
+      const entry = {
+        userId: "user1",
+        recruitId: "recruit1",
+        channelId: "ch1",
+        lastRemindedAtUtc: null,
+      };
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
 
-    expect(shouldSendReminder(entry, null, nowUtc)).toBe(true);
+      expect(shouldSendReminder(entry, 60, nowUtc)).toBe(true);
+    });
+
+    it("should use default interval of 60 minutes when reminderIntervalMin is null", () => {
+      const entry = {
+        userId: "user1",
+        recruitId: "recruit1",
+        channelId: "ch1",
+        lastRemindedAtUtc: "2026-01-17T11:00:00.000Z",
+      };
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+
+      expect(shouldSendReminder(entry, null, nowUtc)).toBe(true);
+    });
+
+    it("should return false when interval has not passed", () => {
+      const entry = {
+        userId: "user1",
+        recruitId: "recruit1",
+        channelId: "ch1",
+        lastRemindedAtUtc: "2026-01-17T11:30:00.000Z",
+      };
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+
+      expect(shouldSendReminder(entry, 60, nowUtc)).toBe(false);
+    });
+
+    it("should return true when interval has exactly passed", () => {
+      const entry = {
+        userId: "user1",
+        recruitId: "recruit1",
+        channelId: "ch1",
+        lastRemindedAtUtc: "2026-01-17T11:00:00.000Z",
+      };
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+
+      expect(shouldSendReminder(entry, 60, nowUtc)).toBe(true);
+    });
+
+    it("should handle custom interval minutes", () => {
+      const entry = {
+        userId: "user1",
+        recruitId: "recruit1",
+        channelId: "ch1",
+        lastRemindedAtUtc: "2026-01-17T11:45:00.000Z",
+      };
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+
+      expect(shouldSendReminder(entry, 30, nowUtc)).toBe(false);
+    });
   });
 
-  it("should return false when interval has not passed", () => {
-    const entry = {
-      lastRemindedAtUtc: "2026-01-17T11:30:00.000Z",
-    };
-    const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+  describe("buildReminderMessage", () => {
+    it("should return correct message content", () => {
+      const recruitId = "recruit-123";
+      const message = buildReminderMessage(recruitId);
 
-    expect(shouldSendReminder(entry, 60, nowUtc)).toBe(false);
+      expect(message).toBe(
+        "希望時間の登録がまだです！\n参加ボタンを押した後、セレクトメニューから希望時間を選択してください。",
+      );
+    });
+
+    it("should include recruit instructions in Japanese", () => {
+      const recruitId = "recruit-456";
+      const message = buildReminderMessage(recruitId);
+
+      expect(message).toContain("希望時間の登録");
+      expect(message).toContain("参加ボタン");
+      expect(message).toContain("セレクトメニュー");
+    });
+
+    it("should handle any recruitId format", () => {
+      const recruitId1 = "recruit-abc123";
+      const recruitId2 = "recruit-xyz789";
+      const recruitId3 = "uuid-format";
+
+      const message1 = buildReminderMessage(recruitId1);
+      const message2 = buildReminderMessage(recruitId2);
+      const message3 = buildReminderMessage(recruitId3);
+
+      // All messages should be identical (recruitId is not used in message)
+      expect(message1).toBe(message2);
+      expect(message2).toBe(message3);
+    });
   });
 
-  it("should return true when interval has exactly passed", () => {
-    const entry = {
-      lastRemindedAtUtc: "2026-01-17T11:00:00.000Z",
-    };
-    const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+  describe("filterPendingReminders", () => {
+    it("should filter entries based on reminder interval", () => {
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+      const entries = [
+        {
+          userId: "user1",
+          recruitId: "recruit1",
+          channelId: "ch1",
+          lastRemindedAtUtc: null, // Never reminded - should be included
+        },
+        {
+          userId: "user2",
+          recruitId: "recruit1",
+          channelId: "ch1",
+          lastRemindedAtUtc: "2026-01-17T11:00:00.000Z", // 60 min ago - should be included
+        },
+        {
+          userId: "user3",
+          recruitId: "recruit1",
+          channelId: "ch1",
+          lastRemindedAtUtc: "2026-01-17T11:30:00.000Z", // 30 min ago - should be excluded
+        },
+      ];
 
-    expect(shouldSendReminder(entry, 60, nowUtc)).toBe(true);
-  });
+      const filtered = filterPendingReminders(entries, 60, nowUtc);
 
-  it("should handle custom interval minutes", () => {
-    const entry = {
-      lastRemindedAtUtc: "2026-01-17T11:45:00.000Z",
-    };
-    const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+      expect(filtered).toHaveLength(2);
+      expect(filtered.some((e) => e.userId === "user1")).toBe(true);
+      expect(filtered.some((e) => e.userId === "user2")).toBe(true);
+      expect(filtered.some((e) => e.userId === "user3")).toBe(false);
+    });
 
-    expect(shouldSendReminder(entry, 30, nowUtc)).toBe(false);
+    it("should include all entries when interval is 0", () => {
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+      const entries = [
+        {
+          userId: "user1",
+          recruitId: "recruit1",
+          channelId: "ch1",
+          lastRemindedAtUtc: "2026-01-17T11:59:00.000Z", // 1 min ago
+        },
+        {
+          userId: "user2",
+          recruitId: "recruit1",
+          channelId: "ch1",
+          lastRemindedAtUtc: "2026-01-17T11:00:00.000Z", // 60 min ago
+        },
+      ];
+
+      const filtered = filterPendingReminders(entries, 0, nowUtc);
+
+      expect(filtered).toHaveLength(2);
+    });
+
+    it("should return empty array when no entries", () => {
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+      const entries: {
+        userId: string;
+        recruitId: string;
+        channelId: string;
+        lastRemindedAtUtc: string | null;
+      }[] = [];
+
+      const filtered = filterPendingReminders(entries, 60, nowUtc);
+
+      expect(filtered).toHaveLength(0);
+    });
+
+    it("should handle edge case of exactly interval minutes", () => {
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+      const entries = [
+        {
+          userId: "user1",
+          recruitId: "recruit1",
+          channelId: "ch1",
+          lastRemindedAtUtc: "2026-01-17T11:00:00.000Z", // Exactly 60 min ago - should be included
+        },
+        {
+          userId: "user2",
+          recruitId: "recruit1",
+          channelId: "ch1",
+          lastRemindedAtUtc: "2026-01-17T11:00:01.000Z", // 59 min 59 sec ago - should be excluded
+        },
+      ];
+
+      const filtered = filterPendingReminders(entries, 60, nowUtc);
+
+      // Only user1 should be included (exactly 60 min ago)
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].userId).toBe("user1");
+    });
+
+    it("should preserve original entry properties", () => {
+      const nowUtc = new Date("2026-01-17T12:00:00.000Z");
+      const entries = [
+        {
+          userId: "user1",
+          recruitId: "recruit1",
+          channelId: "ch1",
+          lastRemindedAtUtc: null,
+        },
+      ];
+
+      const filtered = filterPendingReminders(entries, 60, nowUtc);
+
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].userId).toBe("user1");
+      expect(filtered[0].recruitId).toBe("recruit1");
+      expect(filtered[0].channelId).toBe("ch1");
+      expect(filtered[0].lastRemindedAtUtc).toBeNull();
+    });
   });
 });
 
@@ -229,7 +385,7 @@ describe("handleScheduled - reminder failure handling", () => {
       // This should not be reached
       dbUpdates.push(target.userId);
     } catch (error) {
-      // Message send failed, DB update should be skipped
+      // If message send fails, DB update should be skipped
     }
 
     // Verify: DB update should NOT happen when message send fails

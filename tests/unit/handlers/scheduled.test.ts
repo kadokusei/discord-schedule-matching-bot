@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { shouldSendReminder } from "../../../src/features/recruit";
 
 describe("handleScheduled - Date formatting logic", () => {
   it("should format date correctly for Asia/Tokyo timezone", () => {
@@ -129,25 +130,18 @@ describe("handleScheduled - Reminder processing", () => {
   });
 
   it("should calculate reminder eligibility based on interval", () => {
-    // Inline implementation for testing
-    function shouldSendReminder(
-      entry: { lastRemindedAtUtc: string | null },
-      reminderIntervalMin: number | null | undefined,
-      nowUtc: Date,
-    ): boolean {
-      if (!entry.lastRemindedAtUtc) {
-        return true;
-      }
-
-      const intervalMs = (reminderIntervalMin ?? 60) * 60 * 1000;
-      const lastReminded = new Date(entry.lastRemindedAtUtc);
-      const elapsedMs = nowUtc.getTime() - lastReminded.getTime();
-
-      return elapsedMs >= intervalMs;
-    }
-
-    const entry1 = { lastRemindedAtUtc: null };
-    const entry2 = { lastRemindedAtUtc: "2026-01-18T11:00:00.000Z" };
+    const entry1 = {
+      userId: "user-1",
+      recruitId: "recruit-1",
+      channelId: "channel-1",
+      lastRemindedAtUtc: null,
+    };
+    const entry2 = {
+      userId: "user-2",
+      recruitId: "recruit-2",
+      channelId: "channel-2",
+      lastRemindedAtUtc: "2026-01-18T11:00:00.000Z",
+    };
     const nowUtc = new Date("2026-01-18T12:00:00.000Z");
 
     expect(shouldSendReminder(entry1, 60, nowUtc)).toBe(true);
