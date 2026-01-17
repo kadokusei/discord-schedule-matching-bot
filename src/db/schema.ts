@@ -45,6 +45,7 @@ export const recruitEntries = sqliteTable("recruit_entries", {
   userId: text("user_id").notNull(),
   state: text("state").notNull().default("pending_time"),
   availableFromUtc: text("available_from_utc"),
+  createdAtUtc: text("created_at_utc").notNull(),
   updatedAtUtc: text("updated_at_utc").notNull(),
   lastRemindedAtUtc: text("last_reminded_at_utc"),
 });

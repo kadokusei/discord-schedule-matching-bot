@@ -105,6 +105,7 @@ export async function recomputeMatch(
         userId: entry.userId,
         availableFromUtc: entry.availableFromUtc ?? "",
         rank: userRanks.get(entry.userId),
+        createdAtUtc: entry.createdAtUtc,
       }),
     );
 
