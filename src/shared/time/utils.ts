@@ -3,7 +3,7 @@ export interface TimeOption {
   value: string;
 }
 
-function localDateTimeToUtc(
+export function localDateTimeToUtc(
   dateLocal: string,
   timeHHmm: string,
   tz: string,

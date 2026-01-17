@@ -187,8 +187,14 @@ export async function recomputeMatch(
   });
 }
 
+type RecruitMatchSource = {
+  matchedMeetTimeUtc?: string | null;
+  matchedMemberIdsJson?: string | null;
+  [key: string]: unknown;
+};
+
 export function buildMatchFromRecruit(
-  recruit: typeof recruits.$inferSelect,
+  recruit: RecruitMatchSource,
 ): Match | null {
   if (!recruit.matchedMeetTimeUtc || !recruit.matchedMemberIdsJson) {
     return null;
