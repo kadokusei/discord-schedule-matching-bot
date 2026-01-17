@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTimeOptions, type TimeOption } from "../../src/shared/time";
+import { buildTimeOptions, type TimeOption } from "../../../../src/shared/time";
 
 describe("buildTimeOptions", () => {
   it("should generate 13 options with HH:mm labels and ISO 8601 values", () => {

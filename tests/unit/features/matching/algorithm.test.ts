@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeBestParty } from "../../src/features/matching";
+import { computeBestParty } from "../../../../src/features/matching";
 
 describe("selectOptimalAccounts", () => {
   // Inline implementation for testing (due to Cloudflare Workers pool limitations)

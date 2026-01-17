@@ -3,7 +3,7 @@ import {
   diffMatch,
   formatNotification,
   matchSignature,
-} from "../../src/features/recruit";
+} from "../../../../src/features/recruit";
 
 describe("diffMatch", () => {
   it("should detect created when no previous match", () => {

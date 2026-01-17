@@ -116,6 +116,42 @@ bun run test:ui      # Run tests with UI
 bun test             # Bun built-in test runner (unit tests only)
 ```
 
+#### TDD Workflow (Test-Driven Development)
+
+**Follow TDD when implementing new features or modifying existing logic:**
+
+1. **Red**: Write a failing test first that describes the desired behavior
+2. **Green**: Write the minimum code to make the test pass
+3. **Refactor**: Improve the code while keeping tests green
+
+**TDD Commands:**
+```bash
+# Watch mode for TDD (auto-rerun on file changes)
+bun run test --watch
+
+# Watch specific test file
+bun run test -- tests/unit/features/matching/algorithm.test.ts
+```
+
+**Why TDD?**
+- Ensures testability is considered from the start
+- Provides immediate feedback during development
+- Serves as living documentation
+- Catches regressions early
+
+**When to use TDD:**
+- New feature implementation
+- Bug fixes (write test that reproduces the bug first)
+- Refactoring existing code (add characterization tests first)
+- Adding new functions or modifying existing logic
+
+**TDD Pattern for this codebase:**
+1. Write test in `tests/unit/**` or `tests/integration/**`
+2. Run `bun run test --watch` to see the test fail
+3. Implement the feature in `src/**`
+4. Watch the test pass
+5. Refactor and commit when green
+
 #### Test File Naming Conventions
 
 - **`*.test.ts`**: Unit tests that run with both Bun's built-in test runner and Vitest
