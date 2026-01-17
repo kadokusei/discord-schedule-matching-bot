@@ -1,7 +1,16 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { guildSettings, recruitEntries, recruits, schedules } from "../db/schema";
-import { filterPendingReminders, buildReminderMessage, shouldCreateInstance } from "../features/recruit";
+import {
+  guildSettings,
+  recruitEntries,
+  recruits,
+  schedules,
+} from "../db/schema";
+import {
+  filterPendingReminders,
+  buildReminderMessage,
+  shouldCreateInstance,
+} from "../features/recruit";
 import { postChannelMessage, postRecruitMessage } from "../features/discord";
 import type { Env } from "../lib/types";
 

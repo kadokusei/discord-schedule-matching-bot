@@ -4,10 +4,7 @@ import {
   verifyKey,
 } from "discord-interactions";
 import { Hono } from "hono";
-import {
-  handleScheduleCommand,
-  handleRiotCommand,
-} from "./handlers/commands";
+import { handleScheduleCommand, handleRiotCommand } from "./handlers/commands";
 import { handleComponentInteraction } from "./handlers/components";
 import { handleScheduled } from "./handlers/scheduled";
 import type { Env, InteractionBody } from "./lib/types";

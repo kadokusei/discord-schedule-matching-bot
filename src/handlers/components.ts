@@ -1,9 +1,14 @@
 import { InteractionResponseType } from "discord-interactions";
 import type { Context } from "hono";
-import { and, eq, } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { guildSettings, recruitEntries, recruits, schedules } from "../db/schema";
-import { deleteDiscordMessage, } from "../features/discord";
+import {
+  guildSettings,
+  recruitEntries,
+  recruits,
+  schedules,
+} from "../db/schema";
+import { deleteDiscordMessage } from "../features/discord";
 import type { Env, InteractionBody } from "../lib/types";
 
 export async function handleComponentInteraction(
