@@ -83,6 +83,9 @@ web_modules/
 .env.production.local
 .env.local
 
+# Cloudflare Workers local development secrets
+.dev.vars
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
