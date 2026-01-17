@@ -10,7 +10,7 @@ export default defineWorkersConfig({
         singleWorker: true,
         wrangler: {
           configPath: "./wrangler.toml",
-          envName: "development",
+          environment: "development",
         },
         miniflare: {
           bindings: {
