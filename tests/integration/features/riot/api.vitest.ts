@@ -297,7 +297,8 @@ describe("fetchValorantRank", () => {
         Promise.resolve({
           ok: false,
           status: 408,
-          text: () => Promise.resolve(riotApiFixtures.errors.requestTimeout.body),
+          text: () =>
+            Promise.resolve(riotApiFixtures.errors.requestTimeout.body),
         } as Response),
       );
 
