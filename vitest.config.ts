@@ -10,10 +10,15 @@ export default defineWorkersConfig({
         singleWorker: true,
         wrangler: {
           configPath: "./wrangler.toml",
+          envName: "development",
         },
         miniflare: {
           bindings: {
             DISCORD_PUBLIC_KEY: "test-public-key",
+            HENRIKDEV_API_KEY: "test-api-key",
+          },
+          d1Databases: {
+            DB: ":memory:",
           },
         },
       },
