@@ -3,15 +3,23 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 [env.development]
-vars = { ENVIRONMENT = "development", DISCORD_BOT_TOKEN = "", HENRIKDEV_API_KEY = "" }
+vars = { ENVIRONMENT = "development" }
 
 [[env.development.d1_databases]]
 binding = "DB"
 database_name = "development-db"
 database_id = "local"
 
+[env.staging]
+vars = { ENVIRONMENT = "staging" }
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "staging-db"
+database_id = "<STAGING_DATABASE_ID>"
+
 [env.production]
-vars = { ENVIRONMENT = "production", DISCORD_BOT_TOKEN = "", HENRIKDEV_API_KEY = "" }
+vars = { ENVIRONMENT = "production" }
 
 [[env.production.d1_databases]]
 binding = "DB"
