@@ -125,7 +125,8 @@ export function computeBestParty(entries: Entry[]): BestParty {
       // 回答時間が早いユーザー優先
       if (
         sumCreatedAtValue < bestSumCreatedAt ||
-        (sumCreatedAtValue === bestSumCreatedAt && rankVariance < bestRankVariance)
+        (sumCreatedAtValue === bestSumCreatedAt &&
+          rankVariance < bestRankVariance)
       ) {
         bestSumCreatedAt = sumCreatedAtValue;
         bestRankVariance = rankVariance;

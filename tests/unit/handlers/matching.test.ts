@@ -2,12 +2,10 @@ import { describe, it, expect } from "vitest";
 
 describe("buildMatchFromRecruit", () => {
   // Inline implementation for testing
-  function buildMatchFromRecruit(
-    recruit: {
-      matchedMeetTimeUtc: string | null;
-      matchedMemberIdsJson: string | null;
-    },
-  ) {
+  function buildMatchFromRecruit(recruit: {
+    matchedMeetTimeUtc: string | null;
+    matchedMemberIdsJson: string | null;
+  }) {
     if (!recruit.matchedMeetTimeUtc || !recruit.matchedMemberIdsJson) {
       return null;
     }
@@ -157,9 +155,17 @@ describe("recomputeMatch - filtering logic", () => {
 
   it("should filter entries to extract userId and availableFromUtc", () => {
     const entries = [
-      { userId: "user1", state: "confirmed", availableFromUtc: "2026-01-18T12:00:00.000Z" },
+      {
+        userId: "user1",
+        state: "confirmed",
+        availableFromUtc: "2026-01-18T12:00:00.000Z",
+      },
       { userId: "user2", state: "pending_time", availableFromUtc: null },
-      { userId: "user3", state: "confirmed", availableFromUtc: "2026-01-18T13:00:00.000Z" },
+      {
+        userId: "user3",
+        state: "confirmed",
+        availableFromUtc: "2026-01-18T13:00:00.000Z",
+      },
     ];
 
     const confirmedUsers = entries
@@ -177,7 +183,11 @@ describe("recomputeMatch - filtering logic", () => {
 
   it("should extract userId for pending entries", () => {
     const entries = [
-      { userId: "user1", state: "confirmed", availableFromUtc: "2026-01-18T12:00:00.000Z" },
+      {
+        userId: "user1",
+        state: "confirmed",
+        availableFromUtc: "2026-01-18T12:00:00.000Z",
+      },
       { userId: "user2", state: "pending_time", availableFromUtc: null },
       { userId: "user3", state: "pending_time", availableFromUtc: null },
     ];

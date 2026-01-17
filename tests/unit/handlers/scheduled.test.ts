@@ -115,7 +115,11 @@ describe("handleScheduled - Reminder processing", () => {
     const entries = [
       { id: "1", state: "pending_time", lastRemindedAtUtc: null },
       { id: "2", state: "confirmed", lastRemindedAtUtc: null },
-      { id: "3", state: "pending_time", lastRemindedAtUtc: "2026-01-18T11:00:00.000Z" },
+      {
+        id: "3",
+        state: "pending_time",
+        lastRemindedAtUtc: "2026-01-18T11:00:00.000Z",
+      },
       { id: "4", state: "cancelled", lastRemindedAtUtc: null },
     ];
 

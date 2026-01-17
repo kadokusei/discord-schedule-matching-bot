@@ -38,9 +38,9 @@ describe("tierToRank", () => {
   it("should convert tier 0-2 to Unrated 1-3 (actual implementation)", () => {
     // Note: In the actual implementation, tier 0-2 maps to Unrated due to ranks[0] = "Unrated"
     // This may differ from HenrikDev API's actual tier numbering
-    expect(tierToRank(0, 0).rank).toBe("Unrated 1");  // tierIndex 0, divisionIndex 0
-    expect(tierToRank(1, 1).rank).toBe("Unrated 2");  // tierIndex 0, divisionIndex 1
-    expect(tierToRank(2, 2).rank).toBe("Unrated 3");  // tierIndex 0, divisionIndex 2
+    expect(tierToRank(0, 0).rank).toBe("Unrated 1"); // tierIndex 0, divisionIndex 0
+    expect(tierToRank(1, 1).rank).toBe("Unrated 2"); // tierIndex 0, divisionIndex 1
+    expect(tierToRank(2, 2).rank).toBe("Unrated 3"); // tierIndex 0, divisionIndex 2
   });
 
   it("should convert tier 3-5 to Iron 1-3", () => {
@@ -106,14 +106,18 @@ describe("tierToRank", () => {
     // Note: The actual implementation calculates division from tier % 3,
     // not from the division parameter
     const result = tierToRank(13, 1); // 13 % 3 = 1, divisions[1] = "2"
-    expect(result.division).toBe("2");  // divisionIndex 1 maps to "2" in divisions array
+    expect(result.division).toBe("2"); // divisionIndex 1 maps to "2" in divisions array
     expect(result.tier).toBe(13);
   });
 });
 
 describe("formatRankLabel", () => {
   // Inline implementation for testing
-  function formatRankLabel(account: { name: string; tag: string; rank: { rank: string } | null }): string {
+  function formatRankLabel(account: {
+    name: string;
+    tag: string;
+    rank: { rank: string } | null;
+  }): string {
     if (!account.rank) {
       return `${account.name}#${account.tag} (Unrated)`;
     }
