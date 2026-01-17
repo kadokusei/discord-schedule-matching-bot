@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   shouldCreateInstance,
   type RecruitInstance,
-} from "../../src/features/recruit";
+} from "../../../../src/features/recruit";
 
 describe("shouldCreateInstance", () => {
   it("should return false before post_time", () => {
