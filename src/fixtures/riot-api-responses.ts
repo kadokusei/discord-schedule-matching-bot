@@ -73,9 +73,38 @@ type V3MmrResponse = {
 /**
  * tier ID に対応する name のマッピング (OpenAPI tiers enum に基づく)
  */
-const TIER_NAMES: readonly [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27] = [
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-  23, 24, 25, 26, 27,
+const TIER_NAMES: readonly [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+] = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+  22, 23, 24, 25, 26, 27,
 ] as const;
 
 const TIER_NAME_MAP = {
@@ -117,7 +146,8 @@ function createSuccessResponse(
   name = "TestPlayer",
   tag = "123",
 ): V3MmrResponse {
-  const tierName = (TIER_NAME_MAP as Record<number, TierName>)[tierId] ?? "Unrated";
+  const tierName =
+    (TIER_NAME_MAP as Record<number, TierName>)[tierId] ?? "Unrated";
   return {
     status: 200,
     data: {

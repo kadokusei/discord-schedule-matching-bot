@@ -35,12 +35,14 @@ export function shouldCreateInstance(
   // ローカルタイムゾーンでの時刻との差分を計算する
   const baseUtcDate = Date.UTC(year, month, day, 0, 0, 0);
   const formatted = formatter.format(new Date(baseUtcDate));
-  const [fYear, fMonth, fDay, fHour, fMinute, fSecond] = formatted.split(/[/:\s,]+/).map(Number);
+  const [fYear, fMonth, fDay, fHour, fMinute, fSecond] = formatted
+    .split(/[/:\s,]+/)
+    .map(Number);
 
   // formatterが返すローカル時刻とUTC 00:00:00の差分（ミリ秒）
   // 例: UTC 00:00:00 → JST 09:00:00 の場合、差分は -9時間
   const localMidnightUtc = new Date(
-    baseUtcDate - (fHour * 3600000 + fMinute * 60000 + fSecond * 1000)
+    baseUtcDate - (fHour * 3600000 + fMinute * 60000 + fSecond * 1000),
   );
   const postTimeDate = new Date(
     localMidnightUtc.getTime() + hours * 3600000 + minutes * 60000,
