@@ -219,3 +219,21 @@ describe("FetchRankResult interface", () => {
     expect(result.error).toBe("Account not found");
   });
 });
+
+/**
+ * fetchValorantRank の統合テストは以下で行っています:
+ *
+ * @see tests/integration/features/riot/api.vitest.ts
+ *
+ * 統合テストでは:
+ * - OpenAPI定義に基づいたモックデータを使用
+ * - 実際の fetchValorantRank 関数をテスト
+ * - 全 tier 0-27 のマッピングを検証
+ * - エラーハンドリング（400, 401, 403, 404, 408, 429, 503）
+ * - 特殊ケース（data: null, current: null, tier: null）
+ * - ネットワークエラー
+ *
+ * 注: 以前はこのファイルにインライン実装のテストがありましたが、
+ *     実装と同じロジックをコピーしていたため回帰テストとして機能していませんでした。
+ *     統合テストに移行することで、実際の実装に対する正しい回帰テストが可能になりました。
+ */
