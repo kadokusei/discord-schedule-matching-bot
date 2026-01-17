@@ -4,8 +4,35 @@ export interface RecruitEmbedParams {
   status: "open" | "matched" | "cancelled" | "deleted";
   confirmedCount: number;
   pendingCount: number;
+  confirmedUsers?: { userId: string; availableFromUtc: string }[];
+  pendingUserIds?: string[];
   matchedMembers?: string[];
   matchedTime?: string;
+  timezone?: string;
+}
+
+function formatConfirmedUsers(
+  users: { userId: string; availableFromUtc: string }[],
+  timezone?: string,
+): string {
+  if (users.length === 0) return "";
+
+  return users
+    .map((user) => {
+      const time = new Date(user.availableFromUtc).toLocaleTimeString("ja-JP", {
+        timeZone: timezone ?? "Asia/Tokyo",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `<@${user.userId}> (${time})`;
+    })
+    .join(" ");
+}
+
+function formatPendingUsers(userIds: string[]): string {
+  if (userIds.length === 0) return "";
+
+  return userIds.map((id) => `<@${id}> (時間回答待ち)`).join(" ");
 }
 
 export function buildRecruitEmbed(params: RecruitEmbedParams) {
@@ -22,10 +49,19 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
 
   const description = `日付: ${params.targetDateLocal}\n投稿時間: ${params.postTimeHHmm}`;
 
+  let statusValue = `確定: ${params.confirmedCount}人`;
+  if (params.confirmedUsers && params.confirmedUsers.length > 0) {
+    statusValue += `\n${formatConfirmedUsers(params.confirmedUsers, params.timezone)}`;
+  }
+  statusValue += `\n回答待ち: ${params.pendingCount}人`;
+  if (params.pendingUserIds && params.pendingUserIds.length > 0) {
+    statusValue += `\n${formatPendingUsers(params.pendingUserIds)}`;
+  }
+
   const fields: { name: string; value: string; inline: boolean }[] = [
     {
       name: "参加状況",
-      value: `確定: ${params.confirmedCount}人\n回答待ち: ${params.pendingCount}人`,
+      value: statusValue,
       inline: true,
     },
   ];

@@ -1,9 +1,20 @@
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Context } from "hono";
-import { guildSettings, recruitEntries, recruits, riotAccounts, schedules } from "../db/schema";
-import { computeBestParty, formatRankEvaluation, type Entry } from "../features/matching";
-import { diffMatch, formatNotification, matchSignature, type Match } from "../features/recruit";
+import {
+  guildSettings,
+  recruitEntries,
+  recruits,
+  riotAccounts,
+  schedules,
+} from "../db/schema";
+import { computeBestParty, type Entry } from "../features/matching";
+import {
+  diffMatch,
+  formatNotification,
+  matchSignature,
+  type Match,
+} from "../features/recruit";
 import { postChannelMessage, updateDiscordMessage } from "../features/discord";
 import type { Env } from "../lib/types";
 
@@ -55,6 +66,23 @@ export async function recomputeMatch(
     (entry) => entry.state === "pending_time",
   ).length;
 
+  const confirmedUsers = entries
+    .filter(
+      (
+        entry,
+      ): entry is typeof entry & {
+        availableFromUtc: NonNullable<typeof entry.availableFromUtc>;
+      } => entry.state === "confirmed" && entry.availableFromUtc !== null,
+    )
+    .map((entry) => ({
+      userId: entry.userId,
+      availableFromUtc: entry.availableFromUtc,
+    }));
+
+  const pendingUserIds = entries
+    .filter((entry) => entry.state === "pending_time")
+    .map((entry) => entry.userId);
+
   const previousMatch = buildMatchFromRecruit(recruit);
 
   // 各ユーザーのランク情報を取得
@@ -99,29 +127,15 @@ export async function recomputeMatch(
         status: "open",
         confirmedCount,
         pendingCount,
+        confirmedUsers,
+        pendingUserIds,
+        timezone,
       });
     } catch (error) {
       console.error(
         `Failed to update Discord message for recruit ${recruitId}:`,
         error,
       );
-    }
-
-    // ランク評価メッセージをチャンネルに送信
-    if (confirmedEntries.length > 0) {
-      try {
-        const rankEvaluation = formatRankEvaluation(confirmedEntries);
-        await postChannelMessage(
-          c.env,
-          recruit.channelId,
-          `【現在の参加状況】\n${rankEvaluation}`,
-        );
-      } catch (error) {
-        console.error(
-          `Failed to send rank evaluation message for recruit ${recruitId}:`,
-          error,
-        );
-      }
     }
 
     await notifyMatchUpdate(c.env, recruit, previousMatch, null);
@@ -149,12 +163,15 @@ export async function recomputeMatch(
       status: "matched",
       confirmedCount,
       pendingCount,
+      confirmedUsers,
+      pendingUserIds,
       matchedMembers: bestParty.memberIds,
       matchedTime: new Date(bestParty.meetTimeUtc).toLocaleTimeString("ja-JP", {
         timeZone: timezone,
         hour: "2-digit",
         minute: "2-digit",
       }),
+      timezone,
     });
   } catch (error) {
     console.error(

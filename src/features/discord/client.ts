@@ -1,4 +1,3 @@
-
 import { buildRecruitEmbed } from "./embed";
 import type { Env } from "../../lib/types";
 
@@ -56,8 +55,11 @@ export async function updateDiscordMessage(
     status: "open" | "matched" | "cancelled" | "deleted";
     confirmedCount: number;
     pendingCount: number;
+    confirmedUsers?: { userId: string; availableFromUtc: string }[];
+    pendingUserIds?: string[];
     matchedMembers?: string[];
     matchedTime?: string;
+    timezone?: string;
   },
 ): Promise<void> {
   const embedData = buildRecruitEmbed(params);
