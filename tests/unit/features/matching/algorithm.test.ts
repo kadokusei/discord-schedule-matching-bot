@@ -384,11 +384,31 @@ describe("selectOptimalAccounts", () => {
 describe("computeBestParty", () => {
   it("should return all 5 members when exactly 5", () => {
     const entries = [
-      { userId: "user1", availableFromUtc: "2026-01-16T21:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z" },
-      { userId: "user2", availableFromUtc: "2026-01-16T21:30:00.000Z", createdAtUtc: "2026-01-16T20:10:00.000Z" },
-      { userId: "user3", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:20:00.000Z" },
-      { userId: "user4", availableFromUtc: "2026-01-16T22:30:00.000Z", createdAtUtc: "2026-01-16T20:30:00.000Z" },
-      { userId: "user5", availableFromUtc: "2026-01-16T23:00:00.000Z", createdAtUtc: "2026-01-16T20:40:00.000Z" },
+      {
+        userId: "user1",
+        availableFromUtc: "2026-01-16T21:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+      },
+      {
+        userId: "user2",
+        availableFromUtc: "2026-01-16T21:30:00.000Z",
+        createdAtUtc: "2026-01-16T20:10:00.000Z",
+      },
+      {
+        userId: "user3",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:20:00.000Z",
+      },
+      {
+        userId: "user4",
+        availableFromUtc: "2026-01-16T22:30:00.000Z",
+        createdAtUtc: "2026-01-16T20:30:00.000Z",
+      },
+      {
+        userId: "user5",
+        availableFromUtc: "2026-01-16T23:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:40:00.000Z",
+      },
     ];
 
     const result = computeBestParty(entries);
@@ -399,12 +419,36 @@ describe("computeBestParty", () => {
 
   it("should select 5 members with earliest meet time when more than 5", () => {
     const entries = [
-      { userId: "user1", availableFromUtc: "2026-01-16T21:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z" },
-      { userId: "user2", availableFromUtc: "2026-01-16T21:30:00.000Z", createdAtUtc: "2026-01-16T20:10:00.000Z" },
-      { userId: "user3", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:20:00.000Z" },
-      { userId: "user4", availableFromUtc: "2026-01-16T22:30:00.000Z", createdAtUtc: "2026-01-16T20:30:00.000Z" },
-      { userId: "user5", availableFromUtc: "2026-01-16T23:00:00.000Z", createdAtUtc: "2026-01-16T20:40:00.000Z" },
-      { userId: "user6", availableFromUtc: "2026-01-16T23:30:00.000Z", createdAtUtc: "2026-01-16T20:50:00.000Z" },
+      {
+        userId: "user1",
+        availableFromUtc: "2026-01-16T21:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+      },
+      {
+        userId: "user2",
+        availableFromUtc: "2026-01-16T21:30:00.000Z",
+        createdAtUtc: "2026-01-16T20:10:00.000Z",
+      },
+      {
+        userId: "user3",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:20:00.000Z",
+      },
+      {
+        userId: "user4",
+        availableFromUtc: "2026-01-16T22:30:00.000Z",
+        createdAtUtc: "2026-01-16T20:30:00.000Z",
+      },
+      {
+        userId: "user5",
+        availableFromUtc: "2026-01-16T23:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:40:00.000Z",
+      },
+      {
+        userId: "user6",
+        availableFromUtc: "2026-01-16T23:30:00.000Z",
+        createdAtUtc: "2026-01-16T20:50:00.000Z",
+      },
     ];
 
     const result = computeBestParty(entries);
@@ -415,12 +459,36 @@ describe("computeBestParty", () => {
 
   it("should be stable on ties", () => {
     const entries = [
-      { userId: "user1", availableFromUtc: "2026-01-16T21:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z" },
-      { userId: "user2", availableFromUtc: "2026-01-16T21:30:00.000Z", createdAtUtc: "2026-01-16T20:10:00.000Z" },
-      { userId: "user3", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:20:00.000Z" },
-      { userId: "user4", availableFromUtc: "2026-01-16T22:30:00.000Z", createdAtUtc: "2026-01-16T20:30:00.000Z" },
-      { userId: "user5", availableFromUtc: "2026-01-16T23:00:00.000Z", createdAtUtc: "2026-01-16T20:40:00.000Z" },
-      { userId: "user6", availableFromUtc: "2026-01-16T23:00:00.000Z", createdAtUtc: "2026-01-16T20:50:00.000Z" },
+      {
+        userId: "user1",
+        availableFromUtc: "2026-01-16T21:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+      },
+      {
+        userId: "user2",
+        availableFromUtc: "2026-01-16T21:30:00.000Z",
+        createdAtUtc: "2026-01-16T20:10:00.000Z",
+      },
+      {
+        userId: "user3",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:20:00.000Z",
+      },
+      {
+        userId: "user4",
+        availableFromUtc: "2026-01-16T22:30:00.000Z",
+        createdAtUtc: "2026-01-16T20:30:00.000Z",
+      },
+      {
+        userId: "user5",
+        availableFromUtc: "2026-01-16T23:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:40:00.000Z",
+      },
+      {
+        userId: "user6",
+        availableFromUtc: "2026-01-16T23:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:50:00.000Z",
+      },
     ];
 
     const result1 = computeBestParty(entries);
@@ -432,12 +500,36 @@ describe("computeBestParty", () => {
 
   it("should prioritize earlier responders when meet times are equal", () => {
     const entries = [
-      { userId: "user1", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z" },
-      { userId: "user2", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:10:00.000Z" },
-      { userId: "user3", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:20:00.000Z" },
-      { userId: "user4", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:30:00.000Z" },
-      { userId: "user5", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:40:00.000Z" },
-      { userId: "user6", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:50:00.000Z" },
+      {
+        userId: "user1",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+      },
+      {
+        userId: "user2",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:10:00.000Z",
+      },
+      {
+        userId: "user3",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:20:00.000Z",
+      },
+      {
+        userId: "user4",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:30:00.000Z",
+      },
+      {
+        userId: "user5",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:40:00.000Z",
+      },
+      {
+        userId: "user6",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:50:00.000Z",
+      },
     ];
 
     const result = computeBestParty(entries);
@@ -452,12 +544,36 @@ describe("computeBestParty", () => {
     // userA answers early at 21:30, userB answers at 22:00
     // userA changes to 22:00, userA should be prioritized (earlier createdAt)
     const entries = [
-      { userId: "userA", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z" },
-      { userId: "userB", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T21:00:00.000Z" },
-      { userId: "userC", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:10:00.000Z" },
-      { userId: "userD", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:20:00.000Z" },
-      { userId: "userE", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:30:00.000Z" },
-      { userId: "userF", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:40:00.000Z" },
+      {
+        userId: "userA",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+      },
+      {
+        userId: "userB",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T21:00:00.000Z",
+      },
+      {
+        userId: "userC",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:10:00.000Z",
+      },
+      {
+        userId: "userD",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:20:00.000Z",
+      },
+      {
+        userId: "userE",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:30:00.000Z",
+      },
+      {
+        userId: "userF",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:40:00.000Z",
+      },
     ];
 
     const result = computeBestParty(entries);
@@ -470,12 +586,42 @@ describe("computeBestParty", () => {
 
   it("should fall back to rank variance when createdAt times are equal", () => {
     const entries = [
-      { userId: "user1", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z", rank: "Gold 2" },
-      { userId: "user2", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z", rank: "Gold 2" },
-      { userId: "user3", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z", rank: "Gold 3" },
-      { userId: "user4", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z", rank: "Gold 1" },
-      { userId: "user5", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z", rank: "Gold 2" },
-      { userId: "user6", availableFromUtc: "2026-01-16T22:00:00.000Z", createdAtUtc: "2026-01-16T20:00:00.000Z", rank: "Radiant" },
+      {
+        userId: "user1",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+        rank: "Gold 2",
+      },
+      {
+        userId: "user2",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+        rank: "Gold 2",
+      },
+      {
+        userId: "user3",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+        rank: "Gold 3",
+      },
+      {
+        userId: "user4",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+        rank: "Gold 1",
+      },
+      {
+        userId: "user5",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+        rank: "Gold 2",
+      },
+      {
+        userId: "user6",
+        availableFromUtc: "2026-01-16T22:00:00.000Z",
+        createdAtUtc: "2026-01-16T20:00:00.000Z",
+        rank: "Radiant",
+      },
     ];
 
     const result = computeBestParty(entries);
