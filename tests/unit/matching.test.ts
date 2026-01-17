@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeBestParty } from "../../src/features/matching";
 
-describe("formatRankEvaluation", () => {
+describe("selectOptimalAccounts", () => {
   // Inline implementation for testing (due to Cloudflare Workers pool limitations)
   const RANK_HIERARCHY = [
     "Unrated",
