@@ -27,7 +27,7 @@ src/
 │   └── types.ts          # Shared type definitions (CommandOption, InteractionBody, Env)
 ├── features/             # Feature-based modules
 │   ├── matching/         # Party matching algorithm with rank balancing
-│   │   ├── algorithm.ts  # computeBestParty, formatRankEvaluation
+│   │   ├── algorithm.ts  # computeBestParty, selectOptimalAccounts
 │   │   └── index.ts
 │   ├── recruit/          # Recruit management
 │   │   ├── notification.ts  # Match change notifications

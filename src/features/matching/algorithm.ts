@@ -146,39 +146,6 @@ export function computeBestParty(entries: Entry[]): BestParty {
   );
 }
 
-export function formatRankEvaluation(entries: Entry[]): string {
-  if (entries.length === 0) {
-    return "参加者がいません";
-  }
-
-  const ranks = entries
-    .map((e) => e.rank)
-    .filter((r): r is string => r !== undefined);
-
-  if (ranks.length === 0) {
-    return "ランク情報がありません";
-  }
-
-  const rankCounts = new Map<string, number>();
-  for (const rank of ranks) {
-    rankCounts.set(rank, (rankCounts.get(rank) ?? 0) + 1);
-  }
-
-  const uniqueRanks = Array.from(rankCounts.entries()).sort(
-    (a, b) => getRankLevel(b[0]) - getRankLevel(a[0]),
-  );
-
-  const rankList = uniqueRanks
-    .map(([rank, count]) => `${rank}: ${count}人`)
-    .join(", ");
-
-  const variance = calculateRankVariance(entries);
-  const balanceRating =
-    variance < 10 ? "良好" : variance < 30 ? "やや不平衡" : "不平衡";
-
-  return `ランク構成: ${rankList}\nバランス評価: ${balanceRating}`;
-}
-
 export function selectOptimalAccounts(
   userId: string,
   accounts: { rank: string }[],
