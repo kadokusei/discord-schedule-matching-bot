@@ -12,7 +12,7 @@ export interface BestParty {
 }
 
 // ランク階層定義 (低い順)
-const RANK_HIERARCHY = [
+export const RANK_HIERARCHY = [
   "Unrated",
   "Iron 1",
   "Iron 2",
@@ -41,12 +41,12 @@ const RANK_HIERARCHY = [
   "Radiant",
 ];
 
-function getRankLevel(rank: string): number {
+export function getRankLevel(rank: string): number {
   const index = RANK_HIERARCHY.indexOf(rank);
   return index >= 0 ? index : 0;
 }
 
-function calculateRankVariance(entries: Entry[]): number {
+export function calculateRankVariance(entries: Entry[]): number {
   if (entries.length === 0) return 0;
 
   const ranks = entries
@@ -62,7 +62,7 @@ function calculateRankVariance(entries: Entry[]): number {
   return variance;
 }
 
-function combinations<T>(arr: T[], k: number): T[][] {
+export function combinations<T>(arr: T[], k: number): T[][] {
   if (k === 0) return [[]];
   if (arr.length === 0) return [];
 
@@ -76,7 +76,7 @@ function combinations<T>(arr: T[], k: number): T[][] {
   return [...combsWithFirst, ...combsWithoutFirst];
 }
 
-function sumCreatedAt(entries: Entry[]): number {
+export function sumCreatedAt(entries: Entry[]): number {
   return entries.reduce(
     (sum, e) => sum + new Date(e.createdAtUtc).getTime(),
     0,
