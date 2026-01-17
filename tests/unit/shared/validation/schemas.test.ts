@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   regionSchema,
   timezoneSchema,
+  positiveNumberSchema,
+  settingsOptionsSchema,
   riotAccountAddOptionsSchema,
   riotAccountRemoveOptionsSchema,
   recruitOptionsSchema,
@@ -158,6 +160,94 @@ describe("validation", () => {
         interval: "abc",
       });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe("positiveNumberSchema", () => {
+    it("should accept valid positive integers", () => {
+      expect(positiveNumberSchema.parse(1)).toBe(1);
+      expect(positiveNumberSchema.parse(100)).toBe(100);
+      expect(positiveNumberSchema.parse(Number.MAX_SAFE_INTEGER)).toBe(
+        Number.MAX_SAFE_INTEGER,
+      );
+    });
+
+    it("should reject zero", () => {
+      const result = positiveNumberSchema.safeParse(0);
+      expect(result.success).toBe(false);
+    });
+
+    it("should reject negative numbers", () => {
+      const result = positiveNumberSchema.safeParse(-1);
+      expect(result.success).toBe(false);
+
+      const result2 = positiveNumberSchema.safeParse(-100);
+      expect(result2.success).toBe(false);
+    });
+
+    it("should reject decimal numbers", () => {
+      const result = positiveNumberSchema.safeParse(1.5);
+      expect(result.success).toBe(false);
+
+      const result2 = positiveNumberSchema.safeParse(100.99);
+      expect(result2.success).toBe(false);
+    });
+
+    it("should reject non-numeric values", () => {
+      const result1 = positiveNumberSchema.safeParse("not-a-number");
+      expect(result1.success).toBe(false);
+
+      const result2 = positiveNumberSchema.safeParse(null);
+      expect(result2.success).toBe(false);
+
+      const result3 = positiveNumberSchema.safeParse(undefined);
+      expect(result3.success).toBe(false);
+    });
+  });
+
+  describe("settingsOptionsSchema", () => {
+    it("should accept valid timezones", () => {
+      const result = settingsOptionsSchema.parse({
+        timezone: "Asia/Tokyo",
+      });
+      expect(result.timezone).toBe("Asia/Tokyo");
+
+      const result2 = settingsOptionsSchema.parse({
+        timezone: "America/New_York",
+      });
+      expect(result2.timezone).toBe("America/New_York");
+
+      const result3 = settingsOptionsSchema.parse({
+        timezone: "Europe/London",
+      });
+      expect(result3.timezone).toBe("Europe/London");
+
+      const result4 = settingsOptionsSchema.parse({
+        timezone: "UTC",
+      });
+      expect(result4.timezone).toBe("UTC");
+    });
+
+    it("should reject invalid timezones", () => {
+      const result1 = settingsOptionsSchema.safeParse({
+        timezone: "Invalid/Timezone",
+      });
+      expect(result1.success).toBe(false);
+
+      const result2 = settingsOptionsSchema.safeParse({
+        timezone: "NotATimezone",
+      });
+      expect(result2.success).toBe(false);
+
+      const result3 = settingsOptionsSchema.safeParse({
+        timezone: "",
+      });
+      expect(result3.success).toBe(false);
+
+      const result4 = settingsOptionsSchema.safeParse({
+        timezone: null,
+      });
+      expect(result4.success).toBe(false);
     });
   });
 });
