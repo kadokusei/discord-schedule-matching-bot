@@ -2,6 +2,7 @@ export interface Entry {
   userId: string;
   availableFromUtc: string;
   rank?: string;
+  createdAtUtc: string;
 }
 
 export interface BestParty {
@@ -75,9 +76,9 @@ function combinations<T>(arr: T[], k: number): T[][] {
   return [...combsWithFirst, ...combsWithoutFirst];
 }
 
-function sumAvailableFrom(entries: Entry[]): number {
+function sumCreatedAt(entries: Entry[]): number {
   return entries.reduce(
-    (sum, e) => sum + new Date(e.availableFromUtc).getTime(),
+    (sum, e) => sum + new Date(e.createdAtUtc).getTime(),
     0,
   );
 }
@@ -98,7 +99,7 @@ export function computeBestParty(entries: Entry[]): BestParty {
 
   let best: BestParty | null = null;
   let bestMeetTime = Number.POSITIVE_INFINITY;
-  let bestSum = Number.POSITIVE_INFINITY;
+  let bestSumCreatedAt = Number.POSITIVE_INFINITY;
   let bestRankVariance = Number.POSITIVE_INFINITY;
 
   for (const combo of combinations(entries, 5)) {
@@ -112,7 +113,7 @@ export function computeBestParty(entries: Entry[]): BestParty {
 
     if (meetTimeValue < bestMeetTime) {
       bestMeetTime = meetTimeValue;
-      bestSum = sumAvailableFrom(combo);
+      bestSumCreatedAt = sumCreatedAt(combo);
       bestRankVariance = rankVariance;
       best = {
         memberIds: combo.map((e) => e.userId).sort(),
@@ -120,13 +121,13 @@ export function computeBestParty(entries: Entry[]): BestParty {
         rankBalanceScore: rankVariance,
       };
     } else if (meetTimeValue === bestMeetTime) {
-      const currentSum = sumAvailableFrom(combo);
-      // ランク分散が小さい方を優先
+      const sumCreatedAtValue = sumCreatedAt(combo);
+      // 回答時間が早いユーザー優先
       if (
-        rankVariance < bestRankVariance ||
-        (rankVariance === bestRankVariance && currentSum < bestSum)
+        sumCreatedAtValue < bestSumCreatedAt ||
+        (sumCreatedAtValue === bestSumCreatedAt && rankVariance < bestRankVariance)
       ) {
-        bestSum = currentSum;
+        bestSumCreatedAt = sumCreatedAtValue;
         bestRankVariance = rankVariance;
         best = {
           memberIds: combo.map((e) => e.userId).sort(),

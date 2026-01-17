@@ -138,6 +138,7 @@ export async function handleJoinComponent(
       recruitId,
       userId,
       state: "pending_time",
+      createdAtUtc: nowUtc,
       updatedAtUtc: nowUtc,
     })
     .onConflictDoUpdate({
@@ -145,6 +146,7 @@ export async function handleJoinComponent(
       set: {
         state: "pending_time",
         availableFromUtc: null,
+        createdAtUtc: nowUtc,
         updatedAtUtc: nowUtc,
       },
     });
