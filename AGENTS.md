@@ -113,7 +113,26 @@ bun run db:migrate   # Apply migrations
 ```bash
 bun run test         # Run tests (preferred over `bun test`)
 bun run test:ui      # Run tests with UI
+bun test             # Bun built-in test runner (unit tests only)
 ```
+
+#### Test File Naming Conventions
+
+- **`*.test.ts`**: Unit tests that run with both Bun's built-in test runner and Vitest
+  - Use for pure unit tests that don't require Cloudflare Workers environment
+  - Located in `tests/unit/` directory
+  - Example: `tests/unit/matching.test.ts`
+
+- **`*.vitest.ts`**: Vitest-only tests (require Cloudflare Workers pool)
+  - Use for integration tests or tests requiring `cloudflare:test` utilities
+  - Located in `tests/integration/` directory
+  - Example: `tests/integration/discord.vitest.ts`
+  - Configured in `vitest.config.ts` with `include: ["**/*.test.ts", "**/*.vitest.ts"]`
+
+**Why this separation?**
+- Bun's built-in test runner (`bun test`) only executes `*.test.ts` files
+- Tests requiring `cloudflare:test` module must use `*.vitest.ts` extension to avoid errors
+- This allows quick unit testing with `bun test` while ensuring full test coverage with Vitest
 
 ### Linting/Formatting
 

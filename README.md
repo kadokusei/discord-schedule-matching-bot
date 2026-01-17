@@ -73,6 +73,18 @@ bun run db:migrate
 
 ## 使用方法
 
+### テスト
+
+```bash
+bun run test         # Vitestで全テスト実行（推奨）
+bun run test:ui      # Vitest UIでテスト実行
+bun test             # Bun組み込みテストランナー（ユニットテストのみ）
+```
+
+**テストファイル命名規則**:
+- `*.test.ts`: Bun組み込みとVitest両方で実行されるユニットテスト
+- `*.vitest.ts`: Vitest専用（Cloudflare Workers環境が必要なintegrationテストなど）
+
 ### ローカル開発
 
 ```bash
