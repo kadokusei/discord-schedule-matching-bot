@@ -41,12 +41,12 @@ export const RANK_HIERARCHY = [
   "Radiant",
 ];
 
-export function getRankLevel(rank: string): number {
+function getRankLevel(rank: string): number {
   const index = RANK_HIERARCHY.indexOf(rank);
   return index >= 0 ? index : 0;
 }
 
-export function calculateRankVariance(entries: Entry[]): number {
+function calculateRankVariance(entries: Entry[]): number {
   if (entries.length === 0) return 0;
 
   const ranks = entries
@@ -62,7 +62,7 @@ export function calculateRankVariance(entries: Entry[]): number {
   return variance;
 }
 
-export function combinations<T>(arr: T[], k: number): T[][] {
+function combinations<T>(arr: T[], k: number): T[][] {
   if (k === 0) return [[]];
   if (arr.length === 0) return [];
 
@@ -76,7 +76,7 @@ export function combinations<T>(arr: T[], k: number): T[][] {
   return [...combsWithFirst, ...combsWithoutFirst];
 }
 
-export function sumCreatedAt(entries: Entry[]): number {
+function sumCreatedAt(entries: Entry[]): number {
   return entries.reduce(
     (sum, e) => sum + new Date(e.createdAtUtc).getTime(),
     0,
