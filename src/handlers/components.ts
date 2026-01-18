@@ -205,7 +205,7 @@ export async function handleJoinComponent(
       c.env.HENRIKDEV_API_KEY,
     );
 
-    if (result.failedCount > 0) {
+    if (result.success && result.failedCount > 0) {
       console.warn(
         `[RANK_UPDATE] ${result.failedCount}/${result.accountCount} accounts failed to update for user ${userId}`,
       );
