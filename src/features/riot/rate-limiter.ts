@@ -12,72 +12,74 @@ interface RateLimitCheckResult {
   waitTimeMs?: number;
 }
 
-export class RateLimiter {
-  constructor(private db: DrizzleD1Database<typeof schema>) {}
+const recordRequestWithLimitCheck = async (
+  db: DrizzleD1Database<typeof schema>,
+  limit: number,
+  windowMs: number,
+): Promise<RateLimitCheckResult> => {
+  const nowUtc = new Date().toISOString();
+  const windowStartUtc = new Date(Date.now() - windowMs).toISOString();
 
-  /**
-   * Checks if the API request is allowed based on rate limit
-   * @returns RateLimitCheckResult with allowed status and remaining requests
-   */
-  async checkRateLimit(): Promise<RateLimitCheckResult> {
-    const nowUtc = new Date().toISOString();
-    const windowStartUtc = new Date(
-      Date.now() - RATE_LIMIT_WINDOW_MIN * 60 * 1000,
-    ).toISOString();
+  await db
+    .delete(apiRateLimits)
+    .where(
+      and(
+        eq(apiRateLimits.apiName, "henrikdev"),
+        sql`${apiRateLimits.requestedAtUtc} < ${windowStartUtc}`,
+      ),
+    );
 
-    // Clean old records and count recent requests
-    await this.db
-      .delete(apiRateLimits)
-      .where(
-        and(
-          eq(apiRateLimits.apiName, "henrikdev"),
-          sql`${apiRateLimits.requestedAtUtc} < ${windowStartUtc}`,
-        ),
-      );
+  const recentRequests = await db
+    .select()
+    .from(apiRateLimits)
+    .where(eq(apiRateLimits.apiName, "henrikdev"));
 
-    const recentRequests = await this.db
-      .select()
-      .from(apiRateLimits)
-      .where(eq(apiRateLimits.apiName, "henrikdev"));
+  const currentCount = recentRequests.length;
 
-    const requestCount = recentRequests.length;
+  if (currentCount >= limit) {
+    const oldestRequest = recentRequests.sort(
+      (a, b) =>
+        new Date(a.requestedAtUtc).getTime() -
+        new Date(b.requestedAtUtc).getTime(),
+    )[0];
 
-    if (requestCount >= HENRIKDEV_RATE_LIMIT) {
-      // Calculate wait time until the oldest request expires
-      const oldestRequest = recentRequests.sort(
-        (a, b) =>
-          new Date(a.requestedAtUtc).getTime() -
-          new Date(b.requestedAtUtc).getTime(),
-      )[0];
-      const expireTime =
-        new Date(oldestRequest.requestedAtUtc).getTime() +
-        RATE_LIMIT_WINDOW_MIN * 60 * 1000;
-      const waitTimeMs = expireTime - Date.now();
-
-      return {
-        allowed: false,
-        remainingRequests: 0,
-        waitTimeMs: Math.max(0, waitTimeMs),
-      };
-    }
+    const expireTime =
+      new Date(oldestRequest.requestedAtUtc).getTime() + windowMs;
+    const waitTimeMs = Math.max(0, expireTime - Date.now());
 
     return {
-      allowed: true,
-      remainingRequests: HENRIKDEV_RATE_LIMIT - requestCount,
+      allowed: false,
+      remainingRequests: 0,
+      waitTimeMs,
     };
   }
 
-  /**
-   * Records an API request
-   */
-  async recordRequest(): Promise<void> {
-    const id = crypto.randomUUID();
-    const nowUtc = new Date().toISOString();
+  await db.insert(apiRateLimits).values({
+    id: crypto.randomUUID(),
+    apiName: "henrikdev",
+    requestedAtUtc: nowUtc,
+  });
 
-    await this.db.insert(apiRateLimits).values({
-      id,
-      apiName: "henrikdev",
-      requestedAtUtc: nowUtc,
-    });
+  return {
+    allowed: true,
+    remainingRequests: limit - currentCount - 1,
+  };
+};
+
+export class RateLimiter {
+  constructor(private db: DrizzleD1Database<typeof schema>) {}
+
+  async checkRateLimit(): Promise<RateLimitCheckResult> {
+    return recordRequestWithLimitCheck(
+      this.db,
+      HENRIKDEV_RATE_LIMIT,
+      RATE_LIMIT_WINDOW_MIN * 60 * 1000,
+    );
+  }
+
+  async recordRequest(): Promise<void> {
+    console.warn(
+      "[RATE_LIMITER] recordRequest() is deprecated. Use checkRateLimit() instead.",
+    );
   }
 }
