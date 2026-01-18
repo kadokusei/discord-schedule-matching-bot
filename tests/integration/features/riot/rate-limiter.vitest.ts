@@ -31,28 +31,28 @@ describe("RateLimiter", () => {
       const result = await limiter.checkRateLimit();
 
       expect(result.allowed).toBe(true);
-      expect(result.remainingRequests).toBe(30);
+      expect(result.remainingRequests).toBe(29); // 30 - 1 (already recorded)
     });
 
-    it("should decrease remaining requests after recording", async () => {
+    it("should decrease remaining requests after each call", async () => {
       const limiter = new RateLimiter(db);
 
-      // Record 5 requests
+      // Call checkRateLimit 5 times (each records a request)
       for (let i = 0; i < 5; i++) {
-        await limiter.recordRequest();
+        await limiter.checkRateLimit();
       }
 
       const result = await limiter.checkRateLimit();
       expect(result.allowed).toBe(true);
-      expect(result.remainingRequests).toBe(25);
+      expect(result.remainingRequests).toBe(24); // 30 - 6 (5 + 1 current)
     });
 
     it("should block requests when rate limit exceeded", async () => {
       const limiter = new RateLimiter(db);
 
-      // Record 30 requests
+      // Call checkRateLimit 30 times
       for (let i = 0; i < 30; i++) {
-        await limiter.recordRequest();
+        await limiter.checkRateLimit();
       }
 
       const result = await limiter.checkRateLimit();
@@ -65,9 +65,9 @@ describe("RateLimiter", () => {
     it.skip("should clean up old requests outside the rate limit window", async () => {
       const limiter = new RateLimiter(db);
 
-      // Record 30 requests
+      // Call checkRateLimit 30 times
       for (let i = 0; i < 30; i++) {
-        await limiter.recordRequest();
+        await limiter.checkRateLimit();
       }
 
       // Should be rate limited
@@ -80,33 +80,24 @@ describe("RateLimiter", () => {
       // Should now be allowed
       const allowedResult = await limiter.checkRateLimit();
       expect(allowedResult.allowed).toBe(true);
-      expect(allowedResult.remainingRequests).toBe(30);
+      expect(allowedResult.remainingRequests).toBe(29);
     });
   });
 
-  describe("recordRequest", () => {
-    it("should record request in database", async () => {
+  describe("recordRequest (deprecated)", () => {
+    it("should warn when called directly", async () => {
       const limiter = new RateLimiter(db);
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
       await limiter.recordRequest();
 
-      const requests = await db.select().from(schema.apiRateLimits).all();
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        "[RATE_LIMITER] recordRequest() is deprecated. Use checkRateLimit() instead.",
+      );
 
-      expect(requests.length).toBe(1);
-      expect(requests[0]?.apiName).toBe("henrikdev");
-      expect(requests[0]?.requestedAtUtc).toBeTruthy();
-    });
-
-    it("should record multiple requests", async () => {
-      const limiter = new RateLimiter(db);
-
-      const recordCount = 10;
-      for (let i = 0; i < recordCount; i++) {
-        await limiter.recordRequest();
-      }
-
-      const requests = await db.select().from(schema.apiRateLimits).all();
-
-      expect(requests.length).toBe(recordCount);
+      consoleWarnSpy.mockRestore();
     });
   });
 });
