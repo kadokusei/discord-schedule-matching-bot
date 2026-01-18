@@ -1,6 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import type { Context } from "hono";
 import {
   guildSettings,
   recruitEntries,
@@ -8,14 +7,14 @@ import {
   riotAccounts,
   schedules,
 } from "../db/schema";
-import { computeBestParty, type Entry } from "../features/matching";
+import { postChannelMessage, updateDiscordMessage } from "../features/discord";
+import { type Entry, computeBestParty } from "../features/matching";
 import {
+  type Match,
   diffMatch,
   formatNotification,
   matchSignature,
-  type Match,
 } from "../features/recruit";
-import { postChannelMessage, updateDiscordMessage } from "../features/discord";
 import type { Env } from "../lib/types";
 
 type DiscordUpdateResult = { success: true } | { success: false; error: Error };
@@ -56,7 +55,7 @@ const attemptDiscordUpdate = async (
 };
 
 export async function recomputeMatch(
-  c: Context<{ Bindings: Env }>,
+  c: { env: Env },
   recruitId: string,
 ): Promise<void> {
   const db = drizzle(c.env.DB);

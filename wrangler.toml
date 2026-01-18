@@ -6,7 +6,7 @@ compatibility_date = "2026-01-14"
 vars = { ENVIRONMENT = "development" }
 
 [[env.development.d1_databases]]
-binding = "developmentDB"
+binding = "DB"
 database_name = "development-discord-schedule-matching"
 database_id = "local"
 
@@ -14,7 +14,7 @@ database_id = "local"
 vars = { ENVIRONMENT = "staging" }
 
 [[env.staging.d1_databases]]
-binding = "stagingDB"
+binding = "DB"
 database_name = "staging-discord-schedule-matching"
 database_id = "f8834b9c-4077-4a50-9379-e13bbaf85858"
 
@@ -22,6 +22,6 @@ database_id = "f8834b9c-4077-4a50-9379-e13bbaf85858"
 vars = { ENVIRONMENT = "production" }
 
 [[env.production.d1_databases]]
-binding = "productionDB"
+binding = "DB"
 database_name = "production-discord-schedule-matching"
 database_id = "afcd6240-cdd1-4a72-86db-116915d5e4b6"
