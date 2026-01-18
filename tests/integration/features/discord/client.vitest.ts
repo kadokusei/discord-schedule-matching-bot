@@ -1,6 +1,16 @@
 import { SELF } from "cloudflare:test";
-import { InteractionType } from "discord-interactions";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+const createRequest = (payload: Record<string, unknown>) =>
+  new Request("http://localhost/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Signature-Ed25519": "test-signature",
+      "X-Signature-Timestamp": "test-timestamp",
+    },
+    body: JSON.stringify(payload),
+  });
 
 describe("Discord Interaction Handler", () => {
   beforeAll(async () => {
@@ -12,17 +22,7 @@ describe("Discord Interaction Handler", () => {
   });
 
   it("should respond to PING interaction with PONG", async () => {
-    const pingRequest = new Request("http://localhost/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Signature-Ed25519": "test-signature",
-        "X-Signature-Timestamp": "test-timestamp",
-      },
-      body: JSON.stringify({
-        type: InteractionType.PING,
-      }),
-    });
+    const pingRequest = createRequest({ type: 1 });
 
     const response = await SELF.fetch(pingRequest);
     const text = await response.text();
@@ -31,7 +31,7 @@ describe("Discord Interaction Handler", () => {
     expect(response.headers.get("Content-Type")).toBe("application/json");
 
     const data = JSON.parse(text);
-    expect(data.type).toBe(InteractionType.PING);
+    expect(data.type).toBe(1);
   });
 
   it("should reject requests without signature headers", async () => {
@@ -39,29 +39,9 @@ describe("Discord Interaction Handler", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Signature-Ed25519": "test-signature",
-        "X-Signature-Timestamp": "test-timestamp",
       },
       body: JSON.stringify({
-        type: InteractionType.PING,
-      }),
-    });
-
-    const response = await SELF.fetch(request);
-
-    expect(response.status).toBe(200);
-  });
-
-  it("should return 401 for unknown interaction type", async () => {
-    const request = new Request("http://localhost/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Signature-Ed25519": "test-signature",
-        "X-Signature-Timestamp": "test-timestamp",
-      },
-      body: JSON.stringify({
-        type: 99,
+        type: 1,
       }),
     });
 
@@ -69,6 +49,16 @@ describe("Discord Interaction Handler", () => {
     const text = await response.text();
 
     expect(response.status).toBe(401);
-    expect(text).toContain("Invalid signature");
+    expect(text).toBe("Bad Request");
+  });
+
+  it("should return 400 for unknown interaction type", async () => {
+    const request = createRequest({ type: 99 });
+
+    const response = await SELF.fetch(request);
+    const text = await response.text();
+
+    expect(response.status).toBe(400);
+    expect(text).toContain("Unknown Type");
   });
 });

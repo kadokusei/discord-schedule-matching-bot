@@ -8,14 +8,12 @@ export default defineWorkersConfig({
     poolOptions: {
       workers: {
         singleWorker: true,
-        wrangler: {
-          configPath: "./wrangler.toml",
-          environment: "development",
-        },
+        main: "./src/index.ts",
         miniflare: {
           bindings: {
             DISCORD_PUBLIC_KEY: "test-public-key",
             HENRIKDEV_API_KEY: "test-api-key",
+            DISABLE_SIGNATURE_VERIFICATION: "true",
           },
           d1Databases: {
             DB: ":memory:",

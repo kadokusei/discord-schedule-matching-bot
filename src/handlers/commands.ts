@@ -1,76 +1,56 @@
-import { InteractionResponseType } from "discord-interactions";
-import type { Context } from "hono";
+import type { CommandContext } from "discord-hono";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import { fetchValorantRankWithCache, formatRankLabel } from "../features/riot";
+import type { Env } from "../lib/types";
 import * as v from "../shared/validation";
-import type { Env, InteractionBody } from "../lib/types";
 
-export async function handleScheduleCommand(
-  c: Context<{ Bindings: Env }>,
-  body: InteractionBody,
-): Promise<Response> {
-  const subCommand = body.data?.options?.[0]?.name;
+const isChatInputData = (
+  data: unknown,
+): data is {
+  options: Array<{
+    name: string;
+    value: string | number;
+    options?: { name: string; value: string | number }[];
+  }>;
+} => {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "options" in data &&
+    Array.isArray((data as { options: unknown }).options)
+  );
+};
 
-  if (subCommand === "recruit") {
-    return handleRecruitCommand(c, body);
-  }
-
-  if (subCommand === "settings") {
-    return handleSettingsCommand(c, body);
-  }
-
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: "Unknown command",
-    },
-  });
-}
-
-async function handleRecruitCommand(
-  c: Context<{ Bindings: Env }>,
-  body: InteractionBody,
-): Promise<Response> {
-  const guildId = body.guild_id ?? "";
-  const channelId = body.channel_id ?? "";
-  const creatorId = body.member?.user?.id ?? body.user?.id ?? "";
+export const handlerScheduleRecruit = async (
+  c: CommandContext<{ Bindings: Env }>,
+) => {
+  const guildId = c.interaction.guild_id;
+  const channelId = c.interaction.channel_id;
+  const creatorId =
+    c.interaction.member?.user?.id ?? c.interaction.user?.id ?? "";
 
   const optionsObj = Object.fromEntries(
-    (body.data?.options?.[0]?.options ?? []).map((opt) => [
-      opt.name,
-      opt.value,
-    ]),
+    isChatInputData(c.interaction.data)
+      ? c.interaction.data.options.map((opt) => [opt.name, opt.value])
+      : [],
   );
 
   const parsed = v.recruitOptionsSchema.safeParse(optionsObj);
 
   if (!parsed.success) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: parsed.error.issues[0].message,
-      },
-    });
+    return c.res(parsed.error.issues[0].message);
   }
 
   const { post_time, interval, duration } = parsed.data;
 
   if (!guildId || !channelId || !creatorId) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: "エラー: guild/channel/user情報が不足しています",
-      },
-    });
+    return c.res("エラー: guild/channel/user情報が不足しています");
   }
 
   const db = drizzle(c.env.DB, { schema });
   const scheduleId = crypto.randomUUID();
-
-  const intervalValue = interval ?? null;
-  const durationValue = duration ?? null;
 
   const settings = await db
     .select()
@@ -78,8 +58,8 @@ async function handleRecruitCommand(
     .where(eq(schema.guildSettings.guildId, guildId))
     .get();
 
-  const resolvedInterval = intervalValue ?? settings?.defaultIntervalMin ?? 30;
-  const resolvedDuration = durationValue ?? settings?.defaultDurationMin ?? 360;
+  const resolvedInterval = interval ?? settings?.defaultIntervalMin ?? 30;
+  const resolvedDuration = duration ?? settings?.defaultDurationMin ?? 360;
   const resolvedTemplate = settings?.defaultTemplate ?? "";
 
   await db.insert(schema.schedules).values({
@@ -94,45 +74,30 @@ async function handleRecruitCommand(
     active: 1,
   });
 
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: `スケジュールを作成しました: ${post_time} (間隔 ${resolvedInterval}分 / ${resolvedDuration}分)`,
-    },
-  });
-}
+  return c.res(
+    `スケジュールを作成しました: ${post_time} (間隔 ${resolvedInterval}分 / ${resolvedDuration}分)`,
+  );
+};
 
-async function handleSettingsCommand(
-  c: Context<{ Bindings: Env }>,
-  body: InteractionBody,
-): Promise<Response> {
-  const guildId = body.guild_id ?? "";
+export const handlerScheduleSettings = async (
+  c: CommandContext<{ Bindings: Env }>,
+) => {
+  const guildId = c.interaction.guild_id;
 
   if (!guildId) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: "エラー: guild情報が不足しています",
-      },
-    });
+    return c.res("エラー: guild情報が不足しています");
   }
 
   const optionsObj = Object.fromEntries(
-    (body.data?.options?.[0]?.options ?? []).map((opt) => [
-      opt.name,
-      opt.value,
-    ]),
+    isChatInputData(c.interaction.data)
+      ? c.interaction.data.options.map((opt) => [opt.name, opt.value])
+      : [],
   );
 
   const parsed = v.settingsOptionsSchema.safeParse(optionsObj);
 
   if (!parsed.success) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: parsed.error.issues[0].message,
-      },
-    });
+    return c.res(parsed.error.issues[0].message);
   }
 
   const { timezone } = parsed.data;
@@ -153,88 +118,34 @@ async function handleSettingsCommand(
       },
     });
 
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: `タイムゾーンを ${timezone} に設定しました`,
-    },
-  });
-}
+  return c.res(`タイムゾーンを ${timezone} に設定しました`);
+};
 
-export async function handleRiotCommand(
-  c: Context<{ Bindings: Env }>,
-  body: InteractionBody,
-): Promise<Response> {
-  const subCommand = body.data?.options?.[0]?.name;
-
-  if (subCommand === "account") {
-    return handleRiotAccountCommand(c, body);
-  }
-
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: "Unknown command",
-    },
-  });
-}
-
-async function handleRiotAccountCommand(
-  c: Context<{ Bindings: Env }>,
-  body: InteractionBody,
-): Promise<Response> {
-  const action = body.data?.options?.[0]?.options?.[0]?.name;
-
-  if (action === "add") {
-    return handleRiotAccountAdd(c, body);
-  }
-
-  if (action === "remove") {
-    return handleRiotAccountRemove(c, body);
-  }
-
-  if (action === "list") {
-    return handleRiotAccountList(c, body);
-  }
-
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: "Unknown action",
-    },
-  });
-}
-
-async function handleRiotAccountAdd(
-  c: Context<{ Bindings: Env }>,
-  body: InteractionBody,
-): Promise<Response> {
-  const userId = body.member?.user?.id ?? body.user?.id ?? "";
-  const options = body.data?.options?.[0]?.options?.[0]?.options ?? [];
+export const handlerRiotAccountAdd = async (
+  c: CommandContext<{ Bindings: Env }>,
+) => {
+  const userId = c.interaction.member?.user?.id ?? c.interaction.user?.id ?? "";
+  const options =
+    isChatInputData(c.interaction.data) &&
+    c.interaction.data.options[0]?.options
+      ? c.interaction.data.options[0].options
+      : [];
 
   if (!userId) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: "エラー: user情報が不足しています",
-      },
-    });
+    return c.res("エラー: user情報が不足しています");
   }
 
   const optionsObj = Object.fromEntries(
-    options.map((opt) => [opt.name, opt.value]),
+    options.map((opt: { name: string; value: string | number }) => [
+      opt.name,
+      opt.value,
+    ]),
   );
 
   const parsed = v.riotAccountAddOptionsSchema.safeParse(optionsObj);
 
   if (!parsed.success) {
-    const firstError = parsed.error.issues[0];
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: firstError.message,
-      },
-    });
+    return c.res(parsed.error.issues[0].message);
   }
 
   const { game_name, tag_line, region } = parsed.data;
@@ -263,38 +174,28 @@ async function handleRiotAccountAdd(
   );
 
   if (!rankResult.success || !rankResult.account) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: `エラー: ${rankResult.error ?? "アカウントが見つかりません"}`,
-      },
-    });
+    return c.res(`エラー: ${rankResult.error ?? "アカウントが見つかりません"}`);
   }
 
   const cacheMessage = rankResult.fromCache ? " (キャッシュ)" : "";
 
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: `アカウントを登録しました${cacheMessage}: ${formatRankLabel(rankResult.account)}`,
-    },
-  });
-}
+  return c.res(
+    `アカウントを登録しました${cacheMessage}: ${formatRankLabel(rankResult.account)}`,
+  );
+};
 
-async function handleRiotAccountRemove(
-  c: Context<{ Bindings: Env }>,
-  body: InteractionBody,
-): Promise<Response> {
-  const userId = body.member?.user?.id ?? body.user?.id ?? "";
-  const options = body.data?.options?.[0]?.options?.[0]?.options ?? [];
+export const handlerRiotAccountRemove = async (
+  c: CommandContext<{ Bindings: Env }>,
+) => {
+  const userId = c.interaction.member?.user?.id ?? c.interaction.user?.id ?? "";
+  const options =
+    isChatInputData(c.interaction.data) &&
+    c.interaction.data.options[0]?.options
+      ? c.interaction.data.options[0].options
+      : [];
 
   if (!userId) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: "エラー: user情報が不足しています",
-      },
-    });
+    return c.res("エラー: user情報が不足しています");
   }
 
   const optionsObj = Object.fromEntries(
@@ -304,12 +205,7 @@ async function handleRiotAccountRemove(
   const parsed = v.riotAccountRemoveOptionsSchema.safeParse(optionsObj);
 
   if (!parsed.success) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: parsed.error.issues[0].message,
-      },
-    });
+    return c.res(parsed.error.issues[0].message);
   }
 
   const { game_name, tag_line } = parsed.data;
@@ -317,7 +213,6 @@ async function handleRiotAccountRemove(
   const db = drizzle(c.env.DB, { schema });
 
   if (game_name && tag_line) {
-    // 特定のアカウントを削除
     await db
       .delete(schema.riotAccounts)
       .where(
@@ -328,39 +223,23 @@ async function handleRiotAccountRemove(
         ),
       );
 
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: `アカウントを削除しました: ${game_name}#${tag_line}`,
-      },
-    });
+    return c.res(`アカウントを削除しました: ${game_name}#${tag_line}`);
   }
-  // 全てのアカウントを削除
+
   await db
     .delete(schema.riotAccounts)
     .where(eq(schema.riotAccounts.userId, userId));
 
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: "全てのアカウントを削除しました",
-    },
-  });
-}
+  return c.res("全てのアカウントを削除しました");
+};
 
-async function handleRiotAccountList(
-  c: Context<{ Bindings: Env }>,
-  body: InteractionBody,
-): Promise<Response> {
-  const userId = body.member?.user?.id ?? body.user?.id ?? "";
+export const handlerRiotAccountList = async (
+  c: CommandContext<{ Bindings: Env }>,
+) => {
+  const userId = c.interaction.member?.user?.id ?? c.interaction.user?.id ?? "";
 
   if (!userId) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: "エラー: user情報が不足しています",
-      },
-    });
+    return c.res("エラー: user情報が不足しています");
   }
 
   const db = drizzle(c.env.DB, { schema });
@@ -372,22 +251,12 @@ async function handleRiotAccountList(
     .all();
 
   if (accounts.length === 0) {
-    return c.json({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: "登録されているアカウントはありません",
-      },
-    });
+    return c.res("登録されているアカウントはありません");
   }
 
   const accountList = accounts
     .map((acc) => `- ${acc.gameName}#${acc.tagLine} (${acc.rank})`)
     .join("\n");
 
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      content: `登録されているアカウント:\n${accountList}`,
-    },
-  });
-}
+  return c.res(`登録されているアカウント:\n${accountList}`);
+};

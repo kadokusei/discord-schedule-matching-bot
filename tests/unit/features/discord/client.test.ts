@@ -1,16 +1,22 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  postChannelMessage,
   deleteDiscordMessage,
-  updateDiscordMessage,
+  postChannelMessage,
   postRecruitMessage,
+  updateDiscordMessage,
 } from "../../../../src/features/discord";
 
 const buildEnv = (token: string): Env => ({
   DISCORD_PUBLIC_KEY: "test-public-key",
   DISCORD_BOT_TOKEN: token,
   HENRIKDEV_API_KEY: "test-riot-key",
-  DB: {} as unknown as D1Database,
+  DB: {
+    prepare: vi.fn(),
+    batch: vi.fn(),
+    exec: vi.fn(),
+    withSession: vi.fn(),
+    dump: vi.fn(),
+  },
 });
 
 const getRequestBody = (mockFetch: ReturnType<typeof vi.fn>): string => {
@@ -232,9 +238,7 @@ describe("Discord API Client", () => {
       );
       globalThis.fetch = mockFetch;
 
-      const mockEnv = {
-        DISCORD_BOT_TOKEN: "test-token",
-      } as unknown as Env;
+      const mockEnv = buildEnv("test-token");
 
       await updateDiscordMessage(mockEnv, "ch-123", "msg-456", {
         targetDateLocal: "2026-01-18",
@@ -344,9 +348,7 @@ describe("Discord API Client", () => {
       );
       globalThis.fetch = mockFetch;
 
-      const mockEnv = {
-        DISCORD_BOT_TOKEN: "test-token",
-      } as unknown as Env;
+      const mockEnv = buildEnv("test-token");
 
       const messageId = await postRecruitMessage(mockEnv, "ch-123", {
         recruitId: "recruit-1",
