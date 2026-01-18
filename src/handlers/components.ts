@@ -6,6 +6,51 @@ import * as schema from "../db/schema";
 import { deleteDiscordMessage } from "../features/discord";
 import { fetchValorantRankWithCache } from "../features/riot";
 import type { Env, InteractionBody } from "../lib/types";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
+
+type RankUpdateResult =
+  | { success: true; accountCount: number; failedCount: number }
+  | { success: false; error: string };
+
+const updateAllUserRanks = async (
+  userId: string,
+  db: DrizzleD1Database<typeof schema>,
+  apiKey: string,
+): Promise<RankUpdateResult> => {
+  const userAccounts = await db
+    .select()
+    .from(schema.riotAccounts)
+    .where(eq(schema.riotAccounts.userId, userId))
+    .all();
+
+  if (userAccounts.length === 0) {
+    return { success: true, accountCount: 0, failedCount: 0 };
+  }
+
+  const results = await Promise.allSettled(
+    userAccounts.map((account) =>
+      fetchValorantRankWithCache(
+        account.gameName,
+        account.tagLine,
+        userId,
+        db,
+        apiKey,
+        { isJoining: true },
+      ),
+    ),
+  );
+
+  const succeeded = results.filter(
+    (r) => r.status === "fulfilled" && r.value.success,
+  ).length;
+  const failed = results.length - succeeded;
+
+  return {
+    success: true,
+    accountCount: userAccounts.length,
+    failedCount: failed,
+  };
+};
 
 export async function handleComponentInteraction(
   c: Context<{ Bindings: Env }>,
@@ -154,28 +199,16 @@ export async function handleJoinComponent(
 
   // 参加時のランク更新（非同期で実行）
   (async () => {
-    try {
-      // ユーザーのRiotアカウントを取得
-      const userAccounts = await db
-        .select()
-        .from(schema.riotAccounts)
-        .where(eq(schema.riotAccounts.userId, userId))
-        .all();
+    const result = await updateAllUserRanks(
+      userId,
+      db,
+      c.env.HENRIKDEV_API_KEY,
+    );
 
-      // 各アカウントのランクを更新（isJoining: trueで5分キャッシュ）
-      for (const account of userAccounts) {
-        await fetchValorantRankWithCache(
-          account.gameName,
-          account.tagLine,
-          userId,
-          db,
-          c.env.HENRIKDEV_API_KEY,
-          { isJoining: true },
-        );
-      }
-    } catch (error) {
-      // ランク更新に失敗しても参加処理には影響させない
-      console.error("Failed to update ranks on join:", error);
+    if (result.failedCount > 0) {
+      console.warn(
+        `[RANK_UPDATE] ${result.failedCount}/${result.accountCount} accounts failed to update for user ${userId}`,
+      );
     }
   })();
 
