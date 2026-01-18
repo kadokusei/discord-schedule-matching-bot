@@ -139,6 +139,16 @@ export function formatRankLabel(account: ValorantAccount): string {
   return `${account.name}#${account.tag} (${account.rank.rank})`;
 }
 
+const parseRankSafely = (rankJson: string | null): ValorantRank | null => {
+  if (!rankJson) return null;
+
+  try {
+    return JSON.parse(rankJson) as ValorantRank;
+  } catch {
+    return null;
+  }
+};
+
 export async function fetchValorantRankWithCache(
   gameName: string,
   tagLine: string,
@@ -174,9 +184,7 @@ export async function fetchValorantRankWithCache(
     ).getTime();
     if (lastFetchedTime > cacheExpiryUtc) {
       // キャッシュが有効
-      const rank = existingAccount.rank
-        ? (JSON.parse(existingAccount.rank) as ValorantRank)
-        : null;
+      const rank = parseRankSafely(existingAccount.rank);
       return {
         success: true,
         account: {
@@ -197,9 +205,7 @@ export async function fetchValorantRankWithCache(
   if (!rateLimitResult.allowed) {
     // レートリミット到達時：古いキャッシュがあればそれを返す
     if (existingAccount) {
-      const rank = existingAccount.rank
-        ? (JSON.parse(existingAccount.rank) as ValorantRank)
-        : null;
+      const rank = parseRankSafely(existingAccount.rank);
       return {
         success: true,
         account: {
@@ -226,9 +232,7 @@ export async function fetchValorantRankWithCache(
   if (!apiResult.success || !apiResult.account) {
     // API失敗時：古いキャッシュがあればそれを返す
     if (existingAccount) {
-      const rank = existingAccount.rank
-        ? (JSON.parse(existingAccount.rank) as ValorantRank)
-        : null;
+      const rank = parseRankSafely(existingAccount.rank);
       return {
         success: true,
         account: {
@@ -247,9 +251,7 @@ export async function fetchValorantRankWithCache(
     };
   }
 
-  // API成功時：リクエストを記録してアカウント情報を更新
-  await rateLimiter.recordRequest();
-
+  // API成功時：アカウント情報を更新
   const currentUtc = new Date(nowUtc).toISOString();
   const rankJson = apiResult.account.rank
     ? JSON.stringify(apiResult.account.rank)
