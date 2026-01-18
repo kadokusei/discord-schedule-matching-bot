@@ -184,6 +184,66 @@ bun run format:check # Check formatting without modifying
 bun tsc --noEmit     # Run TypeScript type check
 ```
 
+## Coding Guidelines
+
+### Functional Programming Principles
+
+This codebase follows functional programming principles to ensure code reliability and maintainability:
+
+**1. Const over Let**
+- Always use `const` for variables that don't need reassignment
+- Only use `let` when absolutely necessary (rare in this codebase)
+- This prevents accidental mutations and makes code more predictable
+
+**2. Pure Functions**
+- Separate data transformation from side effects (I/O, database operations)
+- Keep core logic pure: same input → same output, no external dependencies
+- Side effects should be isolated at the edges (handlers, API clients)
+
+**3. Immutable Operations**
+- Use spread syntax (`[...arr, item]`, `{...obj, key: value}`) instead of mutating methods
+- Avoid direct array/object mutations (push, splice, direct property assignment)
+- Use non-destructive methods (map, filter, reduce) over forEach
+
+**4. Type Safety**
+- Leverage TypeScript's type system for compile-time guarantees
+- Use union types and result types for error handling
+- Prefer explicit types over `any` or loose typing
+
+**5. Structured Logging**
+- Use consistent prefixes for log messages: `[COMPONENT]`
+- Include context in error logs (IDs, error messages, metadata)
+- Avoid console.log for debugging; use appropriate levels (error, warn)
+
+**6. Error Handling**
+- Use Result types for operations that can fail
+- Never let exceptions propagate silently
+- Provide meaningful error messages with context
+
+**Examples:**
+
+```typescript
+// ✅ Good: Const, pure function, type-safe
+const parseRankSafely = (rankJson: string | null): ValorantRank | null => {
+  if (!rankJson) return null;
+  try {
+    return JSON.parse(rankJson) as ValorantRank;
+  } catch {
+    return null;
+  }
+};
+
+// ❌ Bad: Let, mutation, no type safety
+let result = null;
+if (rankJson) {
+  try {
+    result = JSON.parse(rankJson);
+  } catch (e) {
+    console.error(e);
+  }
+}
+```
+
 ## Important Notes
 
 - Never run `git push` without explicit user request
