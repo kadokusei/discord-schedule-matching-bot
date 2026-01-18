@@ -25,17 +25,12 @@ export function localDateTimeToUtc(
   const timeZonePart = parts.find((p) => p.type === "timeZoneName");
   const offsetString = timeZonePart?.value ?? "";
 
-  // Parse offset like "GMT+09:00"
   const match = offsetString.match(/GMT([+-])(\d{2}):(\d{2})/);
-  let offsetMinutes = 0;
-  if (match) {
-    const sign = match[1] === "+" ? 1 : -1;
-    const offsetHours = Number.parseInt(match[2], 10);
-    const offsetMins = Number.parseInt(match[3], 10);
-    offsetMinutes = sign * (offsetHours * 60 + offsetMins);
-  }
+  const offsetMinutes = match
+    ? (match[1] === "+" ? 1 : -1) *
+      (Number.parseInt(match[2], 10) * 60 + Number.parseInt(match[3], 10))
+    : 0;
 
-  // Adjust UTC date by subtracting timezone offset
   return new Date(utcDate.getTime() - offsetMinutes * 60 * 1000);
 }
 
@@ -48,23 +43,23 @@ export function buildTimeOptions(
 ): TimeOption[] {
   const baseDate = localDateTimeToUtc(targetDateLocal, postTimeHHmm, tz);
 
-  const options: TimeOption[] = [];
-  const totalOptions = durationMin / intervalMin + 1;
+  const options = Array.from(
+    { length: durationMin / intervalMin + 1 },
+    (_, i) => {
+      const date = new Date(baseDate.getTime() + i * intervalMin * 60 * 1000);
 
-  for (let i = 0; i < totalOptions; i++) {
-    const date = new Date(baseDate.getTime() + i * intervalMin * 60 * 1000);
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const label = formatter.format(date);
+      const value = date.toISOString();
 
-    // Get time in the specified timezone for the label
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    const label = formatter.format(date);
-    const value = date.toISOString();
-    options.push({ label, value });
-  }
+      return { label, value };
+    },
+  );
 
   return options;
 }

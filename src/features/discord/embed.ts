@@ -49,14 +49,16 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
 
   const description = `日付: ${params.targetDateLocal}\n投稿時間: ${params.postTimeHHmm}`;
 
-  let statusValue = `確定: ${params.confirmedCount}人`;
-  if (params.confirmedUsers && params.confirmedUsers.length > 0) {
-    statusValue += `\n${formatConfirmedUsers(params.confirmedUsers, params.timezone)}`;
-  }
-  statusValue += `\n回答待ち: ${params.pendingCount}人`;
-  if (params.pendingUserIds && params.pendingUserIds.length > 0) {
-    statusValue += `\n${formatPendingUsers(params.pendingUserIds)}`;
-  }
+  const confirmedUsersPart =
+    params.confirmedUsers && params.confirmedUsers.length > 0
+      ? `\n${formatConfirmedUsers(params.confirmedUsers, params.timezone)}`
+      : "";
+  const pendingUsersPart =
+    params.pendingUserIds && params.pendingUserIds.length > 0
+      ? `\n${formatPendingUsers(params.pendingUserIds)}`
+      : "";
+
+  const statusValue = `確定: ${params.confirmedCount}人${confirmedUsersPart}\n回答待ち: ${params.pendingCount}人${pendingUsersPart}`;
 
   const fields: { name: string; value: string; inline: boolean }[] = [
     {
@@ -66,17 +68,18 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
     },
   ];
 
-  if (
-    params.status === "matched" &&
-    params.matchedMembers &&
-    params.matchedTime
-  ) {
-    fields.push({
-      name: "マッチング結果",
-      value: `集合時刻: ${params.matchedTime}\nメンバー: ${params.matchedMembers.map((id) => `<@${id}>`).join(", ")}`,
-      inline: false,
-    });
-  }
+  const matchedField =
+    params.status === "matched" && params.matchedMembers && params.matchedTime
+      ? [
+          {
+            name: "マッチング結果",
+            value: `集合時刻: ${params.matchedTime}\nメンバー: ${params.matchedMembers.map((id) => `<@${id}>`).join(", ")}`,
+            inline: false,
+          },
+        ]
+      : [];
+
+  const finalFields = [...fields, ...matchedField];
 
   return {
     embeds: [
@@ -84,7 +87,7 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
         title,
         description,
         color,
-        fields,
+        fields: finalFields,
         timestamp: new Date().toISOString(),
       },
     ],
