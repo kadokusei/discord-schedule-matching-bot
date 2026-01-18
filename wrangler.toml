@@ -16,7 +16,7 @@ vars = { ENVIRONMENT = "staging" }
 [[env.staging.d1_databases]]
 binding = "stagingDB"
 database_name = "staging-discord-schedule-matching"
-database_id = "779a3b1a-8776-4296-8155-ead436888ce3"
+database_id = "f8834b9c-4077-4a50-9379-e13bbaf85858"
 
 [env.production]
 vars = { ENVIRONMENT = "production" }
