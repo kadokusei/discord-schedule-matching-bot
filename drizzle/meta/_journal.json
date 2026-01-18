@@ -15,6 +15,13 @@
       "when": 1768665936666,
       "tag": "0001_slim_revanche",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1768734799061,
+      "tag": "0002_conscious_zeigeist",
+      "breakpoints": true
     }
   ]
 }
