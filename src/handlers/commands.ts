@@ -239,17 +239,19 @@ async function handleRiotAccountAdd(
 
   const { game_name, tag_line, region } = parsed.data;
 
-  // Riot ID のバリデーション（#を含む場合は分割）
-  let finalGameName = game_name;
-  let finalTagLine = tag_line;
+  const parseGameName = (name: string, defaultTag: string) => {
+    if (name.includes("#")) {
+      const [splitName, splitTag] = name.split("#");
+      return { gameName: splitName, tagLine: splitTag || defaultTag };
+    }
+    return { gameName: name, tagLine: defaultTag };
+  };
 
-  if (finalGameName.includes("#")) {
-    const [name, tag] = finalGameName.split("#");
-    finalGameName = name;
-    finalTagLine = tag || finalTagLine;
-  }
+  const { gameName: finalGameName, tagLine: finalTagLine } = parseGameName(
+    game_name,
+    tag_line,
+  );
 
-  // HenrikDev API でランクを取得（キャッシュ・レートリミット付き）
   const db = drizzle(c.env.DB, { schema });
   const rankResult = await fetchValorantRankWithCache(
     finalGameName,

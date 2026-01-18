@@ -87,12 +87,13 @@ export function formatNotification(
     const memberPart = diff.memberDiff
       ? `メンバー変更: (前) ${diff.memberDiff.removed.map((id) => `@${id}`).join(" ")} → (今) ${diff.memberDiff.added.map((id) => `@${id}`).join(" ")}`
       : "";
-    let timePart = "";
-    if (diff.timeDiff && diff.memberDiff) {
-      timePart = `集合 ${diff.timeDiff.prev}→${diff.timeDiff.next}`;
-    } else if (diff.timeDiff) {
-      timePart = `集合時刻: ${diff.timeDiff.prev} → ${diff.timeDiff.next}`;
-    }
+
+    const timePart = diff.timeDiff
+      ? diff.memberDiff
+        ? `集合 ${diff.timeDiff.prev}→${diff.timeDiff.next}`
+        : `集合時刻: ${diff.timeDiff.prev} → ${diff.timeDiff.next}`
+      : "";
+
     const both = memberPart && timePart ? " / " : "";
     const suffix =
       diff.memberDiff && !diff.timeDiff
