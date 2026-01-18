@@ -149,3 +149,5 @@ dist
 plans/
 
 .claude/settings.local.json
+
+.wrangler
