@@ -91,7 +91,7 @@ describe("fetchValorantRankWithCache", () => {
       expect(result.success).toBe(true);
       expect(result.account?.rank).toEqual(mockRankData);
       expect(result.fromCache).toBe(false);
-      expect(result.remainingRequests).toBe(29);
+      expect(result.remainingRequests).toBe(28);
 
       // Verify database entry was created
       const accounts = await db.select().from(schema.riotAccounts).all();
@@ -339,7 +339,7 @@ describe("fetchValorantRankWithCache", () => {
       const { RateLimiter } = await import("../../../../src/features/riot");
       const limiter = new RateLimiter(db);
       for (let i = 0; i < 30; i++) {
-        await limiter.recordRequest();
+        await limiter.checkRateLimit();
       }
 
       const result = await fetchValorantRankWithCache(
@@ -408,6 +408,63 @@ describe("fetchValorantRankWithCache", () => {
       expect(accounts.length).toBe(1);
       expect(accounts[0]?.id).toBe(accountId);
       expect(accounts[0]?.rank).toContain("Radiant");
+    });
+  });
+
+  describe("malformed JSON handling", () => {
+    it("should handle malformed JSON in rank field gracefully", async () => {
+      // Create an entry with malformed JSON
+      const nowUtc = new Date().toISOString();
+      await db.insert(schema.riotAccounts).values({
+        id: crypto.randomUUID(),
+        userId,
+        gameName,
+        tagLine,
+        region: "ap",
+        rank: "{invalid json",
+        createdAtUtc: nowUtc,
+        lastFetchedAtUtc: nowUtc,
+      });
+
+      // Should not throw and return null for rank
+      const result = await fetchValorantRankWithCache(
+        gameName,
+        tagLine,
+        userId,
+        db,
+        apiKey,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.fromCache).toBe(true);
+      expect(result.account?.rank).toBeNull();
+    });
+
+    it("should handle null rank field", async () => {
+      // Create an entry with null rank
+      const nowUtc = new Date().toISOString();
+      await db.insert(schema.riotAccounts).values({
+        id: crypto.randomUUID(),
+        userId,
+        gameName,
+        tagLine,
+        region: "ap",
+        rank: "",
+        createdAtUtc: nowUtc,
+        lastFetchedAtUtc: nowUtc,
+      });
+
+      const result = await fetchValorantRankWithCache(
+        gameName,
+        tagLine,
+        userId,
+        db,
+        apiKey,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.fromCache).toBe(true);
+      expect(result.account?.rank).toBeNull();
     });
   });
 });
