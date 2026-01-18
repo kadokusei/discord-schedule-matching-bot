@@ -18,6 +18,43 @@ import {
 import { postChannelMessage, updateDiscordMessage } from "../features/discord";
 import type { Env } from "../lib/types";
 
+type DiscordUpdateResult = { success: true } | { success: false; error: Error };
+
+const attemptDiscordUpdate = async (
+  env: Env,
+  channelId: string,
+  messageId: string | null,
+  params: {
+    targetDateLocal: string;
+    postTimeHHmm: string;
+    status: "open" | "matched" | "cancelled" | "deleted";
+    confirmedCount: number;
+    pendingCount: number;
+    confirmedUsers?: { userId: string; availableFromUtc: string }[];
+    pendingUserIds?: string[];
+    matchedMembers?: string[];
+    matchedTime?: string;
+    timezone?: string;
+  },
+): Promise<DiscordUpdateResult> => {
+  if (!messageId) {
+    return {
+      success: false,
+      error: new Error("messageId is null or undefined"),
+    };
+  }
+
+  try {
+    await updateDiscordMessage(env, channelId, messageId, params);
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+};
+
 export async function recomputeMatch(
   c: Context<{ Bindings: Env }>,
   recruitId: string,
@@ -110,6 +147,33 @@ export async function recomputeMatch(
     );
 
   if (confirmedEntries.length < 5) {
+    // Discord更新を先に試みる
+    const discordResult = await attemptDiscordUpdate(
+      c.env,
+      recruit.channelId,
+      recruit.messageId,
+      {
+        targetDateLocal: recruit.targetDateLocal,
+        postTimeHHmm,
+        status: "open",
+        confirmedCount,
+        pendingCount,
+        confirmedUsers,
+        pendingUserIds,
+        timezone,
+      },
+    );
+
+    if (!discordResult.success) {
+      console.error(
+        `[MATCHING] Failed to update Discord message for recruit ${recruitId}:`,
+        discordResult.error.message,
+      );
+      // Discord更新失敗時はDB更新をスキップしてreturn
+      return;
+    }
+
+    // Discord成功後にDB更新
     await db
       .update(recruits)
       .set({
@@ -120,25 +184,6 @@ export async function recomputeMatch(
       })
       .where(eq(recruits.id, recruitId));
 
-    // Embed を更新
-    try {
-      await updateDiscordMessage(c.env, recruit.channelId, recruit.messageId, {
-        targetDateLocal: recruit.targetDateLocal,
-        postTimeHHmm,
-        status: "open",
-        confirmedCount,
-        pendingCount,
-        confirmedUsers,
-        pendingUserIds,
-        timezone,
-      });
-    } catch (error) {
-      console.error(
-        `Failed to update Discord message for recruit ${recruitId}:`,
-        error,
-      );
-    }
-
     await notifyMatchUpdate(c.env, recruit, previousMatch, null);
     return;
   }
@@ -146,19 +191,12 @@ export async function recomputeMatch(
   const bestParty = computeBestParty(confirmedEntries);
   const signature = matchSignature(bestParty);
 
-  await db
-    .update(recruits)
-    .set({
-      status: "matched",
-      matchSignature: signature,
-      matchedMeetTimeUtc: bestParty.meetTimeUtc,
-      matchedMemberIdsJson: JSON.stringify(bestParty.memberIds),
-    })
-    .where(eq(recruits.id, recruitId));
-
-  // Embed を更新
-  try {
-    await updateDiscordMessage(c.env, recruit.channelId, recruit.messageId, {
+  // Discord更新を先に試みる
+  const discordResult = await attemptDiscordUpdate(
+    c.env,
+    recruit.channelId,
+    recruit.messageId,
+    {
       targetDateLocal: recruit.targetDateLocal,
       postTimeHHmm,
       status: "matched",
@@ -173,13 +211,28 @@ export async function recomputeMatch(
         minute: "2-digit",
       }),
       timezone,
-    });
-  } catch (error) {
+    },
+  );
+
+  if (!discordResult.success) {
     console.error(
-      `Failed to update Discord message for recruit ${recruitId}:`,
-      error,
+      `[MATCHING] Failed to update Discord message for recruit ${recruitId}:`,
+      discordResult.error.message,
     );
+    // Discord更新失敗時はDB更新をスキップしてreturn
+    return;
   }
+
+  // Discord成功後にDB更新
+  await db
+    .update(recruits)
+    .set({
+      status: "matched",
+      matchSignature: signature,
+      matchedMeetTimeUtc: bestParty.meetTimeUtc,
+      matchedMemberIdsJson: JSON.stringify(bestParty.memberIds),
+    })
+    .where(eq(recruits.id, recruitId));
 
   await notifyMatchUpdate(c.env, recruit, previousMatch, {
     memberIds: bestParty.memberIds,
