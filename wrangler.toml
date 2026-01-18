@@ -7,7 +7,7 @@ vars = { ENVIRONMENT = "development" }
 
 [[env.development.d1_databases]]
 binding = "DB"
-database_name = "development-db"
+database_name = "development-discord-schedule-matching"
 database_id = "local"
 
 [env.staging]
@@ -15,13 +15,13 @@ vars = { ENVIRONMENT = "staging" }
 
 [[env.staging.d1_databases]]
 binding = "DB"
-database_name = "staging-db"
-database_id = "<STAGING_DATABASE_ID>"
+database_name = "staging-discord-schedule-matching"
+database_id = "779a3b1a-8776-4296-8155-ead436888ce3"
 
 [env.production]
 vars = { ENVIRONMENT = "production" }
 
 [[env.production.d1_databases]]
 binding = "DB"
-database_name = "production-db"
-database_id = "<PRODUCTION_DATABASE_ID>"
+database_name = "production-discord-schedule-matching"
+database_id = "afcd6240-cdd1-4a72-86db-116915d5e4b6"
