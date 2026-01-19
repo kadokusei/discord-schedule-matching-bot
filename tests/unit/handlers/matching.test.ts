@@ -1,29 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import { buildMatchFromRecruit } from "../../../src/handlers/matching";
 
 describe("buildMatchFromRecruit", () => {
-  // Inline implementation for testing
-  function buildMatchFromRecruit(recruit: {
-    matchedMeetTimeUtc: string | null;
-    matchedMemberIdsJson: string | null;
-  }) {
-    if (!recruit.matchedMeetTimeUtc || !recruit.matchedMemberIdsJson) {
-      return null;
-    }
-
-    try {
-      const memberIds = JSON.parse(recruit.matchedMemberIdsJson) as string[];
-      if (!Array.isArray(memberIds)) {
-        return null;
-      }
-      return {
-        memberIds,
-        meetTimeUtc: recruit.matchedMeetTimeUtc,
-      };
-    } catch {
-      return null;
-    }
-  }
-
   it("should return null when matchedMeetTimeUtc is null", () => {
     const recruit = {
       matchedMeetTimeUtc: null,
