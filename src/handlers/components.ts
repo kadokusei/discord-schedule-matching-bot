@@ -1,4 +1,11 @@
 import type { ComponentContext } from "discord-hono";
+import { and, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
+import * as schema from "../db/schema";
+import { deleteDiscordMessage } from "../features/discord";
+import { fetchValorantRankWithCache } from "../features/riot";
+import type { Env } from "../lib/types";
 
 const hasValues = (data: unknown): data is { values: string[] } => {
   return (
@@ -8,13 +15,6 @@ const hasValues = (data: unknown): data is { values: string[] } => {
     Array.isArray((data as { values: unknown }).values)
   );
 };
-import { and, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
-import type { DrizzleD1Database } from "drizzle-orm/d1";
-import * as schema from "../db/schema";
-import { deleteDiscordMessage } from "../features/discord";
-import { fetchValorantRankWithCache } from "../features/riot";
-import type { Env } from "../lib/types";
 
 type RankUpdateResult =
   | { success: true; accountCount: number; failedCount: number }
