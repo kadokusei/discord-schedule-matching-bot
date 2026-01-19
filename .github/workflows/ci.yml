@@ -38,5 +38,8 @@ jobs:
       - name: Run format check
         run: bun run format:check
 
+      - name: Run type check
+        run: bun tsc --noEmit
+
       - name: Run tests
         run: bun vitest --run
