@@ -1,75 +1,16 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it, beforeAll, vi } from "vitest";
-import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { describe, expect, it, vi } from "vitest";
 import * as schema from "../../../src/db/schema";
 import {
-  shouldCreateInstance,
-  filterPendingReminders,
   buildReminderMessage,
+  filterPendingReminders,
+  shouldCreateInstance,
 } from "../../../src/features/recruit";
 
 describe("handleScheduled - Integration Tests", () => {
   const db = drizzle(env.DB, { schema });
-
-  beforeAll(async () => {
-    // Create tables using batch
-    await env.DB.batch([
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS guild_settings (
-          id TEXT PRIMARY KEY NOT NULL,
-          guild_id TEXT NOT NULL UNIQUE,
-          timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
-          default_interval_min INTEGER NOT NULL DEFAULT 30,
-          default_duration_min INTEGER NOT NULL DEFAULT 360,
-          default_template TEXT NOT NULL DEFAULT '',
-          reminder_interval_min INTEGER
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS schedules (
-          id TEXT PRIMARY KEY NOT NULL,
-          guild_id TEXT NOT NULL,
-          channel_id TEXT NOT NULL,
-          creator_id TEXT NOT NULL,
-          post_time_hhmm TEXT NOT NULL,
-          interval_min INTEGER NOT NULL DEFAULT 30,
-          duration_min INTEGER NOT NULL DEFAULT 360,
-          template TEXT NOT NULL DEFAULT '',
-          active INTEGER NOT NULL DEFAULT 1
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS recruits (
-          id TEXT PRIMARY KEY NOT NULL,
-          schedule_id TEXT NOT NULL,
-          guild_id TEXT NOT NULL,
-          channel_id TEXT NOT NULL,
-          message_id TEXT NOT NULL,
-          target_date_local TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'open',
-          match_signature TEXT,
-          last_notified_signature TEXT,
-          matched_meet_time_utc TEXT,
-          matched_member_ids_json TEXT,
-          deleted_by TEXT,
-          deleted_at_utc TEXT
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS recruit_entries (
-          recruit_id TEXT NOT NULL,
-          user_id TEXT NOT NULL,
-          state TEXT NOT NULL DEFAULT 'pending_time',
-          available_from_utc TEXT,
-          created_at_utc TEXT NOT NULL,
-          updated_at_utc TEXT NOT NULL,
-          last_reminded_at_utc TEXT,
-          PRIMARY KEY (recruit_id, user_id)
-        )
-      `),
-    ]);
-  });
 
   describe("schedule instance creation", () => {
     it("should create recruit instance when shouldCreateInstance returns true", async () => {

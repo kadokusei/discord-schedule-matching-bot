@@ -1,24 +1,11 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it, beforeAll, beforeEach } from "vitest";
 import { drizzle } from "drizzle-orm/d1";
+import { beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../../../../src/db/schema";
 import { RateLimiter } from "../../../../src/features/riot";
 
 describe("RateLimiter", () => {
   const db = drizzle(env.DB, { schema });
-
-  beforeAll(async () => {
-    // Create api_rate_limits table using batch
-    await env.DB.batch([
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS api_rate_limits (
-          id TEXT PRIMARY KEY NOT NULL,
-          api_name TEXT NOT NULL,
-          requested_at_utc TEXT NOT NULL
-        )
-      `),
-    ]);
-  });
 
   beforeEach(async () => {
     // Clean up before each test
