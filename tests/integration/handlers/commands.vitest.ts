@@ -2,7 +2,7 @@ import { env } from "cloudflare:test";
 import type { CommandContext } from "discord-hono";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../src/db/schema";
 import type { Env } from "../../../src/lib/types";
 
@@ -10,48 +10,6 @@ type MockCommandContext = Partial<CommandContext<{ Bindings: Env }>>;
 
 describe("Command Handlers - Integration Tests", () => {
   const db = drizzle(env.DB, { schema });
-
-  beforeAll(async () => {
-    await env.DB.batch([
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS guild_settings (
-          id TEXT PRIMARY KEY NOT NULL,
-          guild_id TEXT NOT NULL UNIQUE,
-          timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
-          default_interval_min INTEGER NOT NULL DEFAULT 30,
-          default_duration_min INTEGER NOT NULL DEFAULT 360,
-          default_template TEXT NOT NULL DEFAULT '',
-          reminder_interval_min INTEGER
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS schedules (
-          id TEXT PRIMARY KEY NOT NULL,
-          guild_id TEXT NOT NULL,
-          channel_id TEXT NOT NULL,
-          creator_id TEXT NOT NULL,
-          post_time_hhmm TEXT NOT NULL,
-          interval_min INTEGER NOT NULL DEFAULT 30,
-          duration_min INTEGER NOT NULL DEFAULT 360,
-          template TEXT NOT NULL DEFAULT '',
-          active INTEGER NOT NULL DEFAULT 1
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS riot_accounts (
-          id TEXT PRIMARY KEY NOT NULL,
-          user_id TEXT NOT NULL,
-          game_name TEXT NOT NULL,
-          tag_line TEXT NOT NULL,
-          region TEXT DEFAULT 'na' NOT NULL,
-          rank TEXT NOT NULL,
-          created_at_utc TEXT NOT NULL,
-          last_fetched_at_utc TEXT NOT NULL,
-          UNIQUE(user_id, game_name, tag_line)
-        )
-      `),
-    ]);
-  });
 
   beforeEach(async () => {
     await db.delete(schema.schedules);

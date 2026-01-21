@@ -1,11 +1,11 @@
 import { env } from "cloudflare:test";
-import { describe, expect, it, beforeAll, beforeEach, vi } from "vitest";
-import { drizzle } from "drizzle-orm/d1";
 import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../../src/db/schema";
 import {
-  fetchValorantRankWithCache,
   type ValorantRank,
+  fetchValorantRankWithCache,
 } from "../../../../src/features/riot";
 
 // Mock fetch for HenrikDev API
@@ -39,32 +39,6 @@ describe("fetchValorantRankWithCache", () => {
   const tagLine = "1234";
   const userId = "test-user-id";
   const apiKey = env.HENRIKDEV_API_KEY;
-
-  beforeAll(async () => {
-    // Create tables
-    await env.DB.batch([
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS riot_accounts (
-          id TEXT PRIMARY KEY NOT NULL,
-          user_id TEXT NOT NULL,
-          game_name TEXT NOT NULL,
-          tag_line TEXT NOT NULL,
-          region TEXT DEFAULT 'na' NOT NULL,
-          rank TEXT NOT NULL,
-          created_at_utc TEXT NOT NULL,
-          last_fetched_at_utc TEXT NOT NULL,
-          UNIQUE(user_id, game_name, tag_line)
-        )
-      `),
-      env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS api_rate_limits (
-          id TEXT PRIMARY KEY NOT NULL,
-          api_name TEXT NOT NULL,
-          requested_at_utc TEXT NOT NULL
-        )
-      `),
-    ]);
-  });
 
   beforeEach(async () => {
     // Clean up before each test

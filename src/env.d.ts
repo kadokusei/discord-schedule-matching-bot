@@ -1,10 +1,10 @@
-import type { ProvidedEnv } from "@cloudflare/vitest-pool-workers";
+import type { Env } from "./lib/types";
+import type { D1Migration } from "cloudflare:test";
 
-interface ExtendedEnv extends ProvidedEnv {
-  DISCORD_PUBLIC_KEY: string;
+interface TestEnv extends Env {
+  TEST_MIGRATIONS: D1Migration[];
 }
 
 declare module "cloudflare:test" {
-  export const SELF: Fetcher;
-  export const env: ExtendedEnv;
+  interface ProvidedEnv extends TestEnv {}
 }
