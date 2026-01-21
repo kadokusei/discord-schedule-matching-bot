@@ -1,4 +1,9 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const guildSettings = sqliteTable("guild_settings", {
   id: text("id").primaryKey(),
@@ -50,16 +55,26 @@ export const recruitEntries = sqliteTable("recruit_entries", {
   lastRemindedAtUtc: text("last_reminded_at_utc"),
 });
 
-export const riotAccounts = sqliteTable("riot_accounts", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull(),
-  gameName: text("game_name").notNull(),
-  tagLine: text("tag_line").notNull(),
-  region: text("region").notNull().default("na"),
-  rank: text("rank").notNull(),
-  createdAtUtc: text("created_at_utc").notNull(),
-  lastFetchedAtUtc: text("last_fetched_at_utc").notNull(),
-});
+export const riotAccounts = sqliteTable(
+  "riot_accounts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    gameName: text("game_name").notNull(),
+    tagLine: text("tag_line").notNull(),
+    region: text("region").notNull().default("na"),
+    rank: text("rank").notNull(),
+    createdAtUtc: text("created_at_utc").notNull(),
+    lastFetchedAtUtc: text("last_fetched_at_utc").notNull(),
+  },
+  (t) => [
+    uniqueIndex("user_id_game_name_tag_line_unique").on(
+      t.userId,
+      t.gameName,
+      t.tagLine,
+    ),
+  ],
+);
 
 export const apiRateLimits = sqliteTable("api_rate_limits", {
   id: text("id").primaryKey(),
