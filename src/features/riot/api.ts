@@ -32,6 +32,8 @@ export interface FetchRankWithCacheOptions {
   cacheDurationMs?: number;
   /** 参加時フラグ。trueの場合、キャッシュ期間を短くして更新頻度を上げる */
   isJoining?: boolean;
+  /** リージョン（例: "ap", "na", "eu", "kr"）。指定なしの場合、既存アカウントのリージョンまたは "ap" を使用 */
+  region?: string;
 }
 
 export async function fetchValorantRank(
@@ -161,6 +163,7 @@ export async function fetchValorantRankWithCache(
   const cacheDurationMs =
     options?.cacheDurationMs ??
     (isJoining ? CACHE_DURATION_MS_JOINING : CACHE_DURATION_MS_NORMAL);
+  const explicitRegion = options?.region;
   const nowUtc = Date.now();
   const cacheExpiryUtc = nowUtc - cacheDurationMs;
 
@@ -198,6 +201,9 @@ export async function fetchValorantRankWithCache(
     }
   }
 
+  // リージョンの決定: 明示指定 > 既存アカウントの保存値 > デフォルト "ap"
+  const region = explicitRegion ?? existingAccount?.region ?? "ap";
+
   // レートリミットチェック
   const rateLimiter = new RateLimiter(db);
   const rateLimitResult = await rateLimiter.checkRateLimit();
@@ -227,7 +233,7 @@ export async function fetchValorantRankWithCache(
   }
 
   // API呼び出し
-  const apiResult = await fetchValorantRank(gameName, tagLine, apiKey);
+  const apiResult = await fetchValorantRank(gameName, tagLine, apiKey, region);
 
   if (!apiResult.success || !apiResult.account) {
     // API失敗時：古いキャッシュがあればそれを返す
@@ -265,7 +271,7 @@ export async function fetchValorantRankWithCache(
       userId,
       gameName: apiResult.account.name,
       tagLine: apiResult.account.tag,
-      region: "ap",
+      region,
       rank: rankJson,
       createdAtUtc: currentUtc,
       lastFetchedAtUtc: currentUtc,
