@@ -70,21 +70,4 @@ describe("RateLimiter", () => {
       expect(allowedResult.remainingRequests).toBe(29);
     });
   });
-
-  describe("recordRequest (deprecated)", () => {
-    it("should warn when called directly", async () => {
-      const limiter = new RateLimiter(db);
-      const consoleWarnSpy = vi
-        .spyOn(console, "warn")
-        .mockImplementation(() => {});
-
-      await limiter.recordRequest();
-
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        "[RATE_LIMITER] recordRequest() is deprecated. Use checkRateLimit() instead.",
-      );
-
-      consoleWarnSpy.mockRestore();
-    });
-  });
 });

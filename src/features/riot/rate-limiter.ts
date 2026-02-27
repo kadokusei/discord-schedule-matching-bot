@@ -76,10 +76,4 @@ export class RateLimiter {
       RATE_LIMIT_WINDOW_MIN * 60 * 1000,
     );
   }
-
-  async recordRequest(): Promise<void> {
-    console.warn(
-      "[RATE_LIMITER] recordRequest() is deprecated. Use checkRateLimit() instead.",
-    );
-  }
 }

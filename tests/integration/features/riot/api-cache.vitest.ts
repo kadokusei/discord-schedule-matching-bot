@@ -292,7 +292,7 @@ describe("fetchValorantRankWithCache", () => {
       const { RateLimiter } = await import("../../../../src/features/riot");
       const limiter = new RateLimiter(db);
       for (let i = 0; i < 30; i++) {
-        await limiter.recordRequest();
+        await limiter.checkRateLimit();
       }
 
       const result = await fetchValorantRankWithCache(
