@@ -26,11 +26,21 @@ export const positiveNumberSchema = z
 
 // --- スキーマ定義: Riotアカウント追加 ---
 
-export const riotAccountAddOptionsSchema = z.object({
-  game_name: z.string().min(1, { error: "エラー: game_nameは必須です" }),
-  tag_line: z.string().min(1, { error: "エラー: tag_lineは必須です" }),
-  region: regionSchema.default("na"),
-});
+export const riotAccountAddOptionsSchema = z
+  .object({
+    game_name: z.string().min(1, { error: "エラー: game_nameは必須です" }),
+    tag_line: z
+      .string()
+      .min(1, { error: "エラー: tag_lineは必須です" })
+      .optional(),
+    region: regionSchema.default("na"),
+  })
+  .refine(
+    (data) => data.game_name.includes("#") || data.tag_line !== undefined,
+    {
+      error: "エラー: game_nameに#が含まれない場合、tag_lineは必須です",
+    },
+  );
 
 // --- スキーマ定義: Riotアカウント削除 ---
 

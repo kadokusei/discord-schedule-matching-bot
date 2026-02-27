@@ -150,12 +150,12 @@ export const handlerRiotAccountAdd = async (
 
   const { game_name, tag_line, region } = parsed.data;
 
-  const parseGameName = (name: string, defaultTag: string) => {
+  const parseGameName = (name: string, defaultTag?: string) => {
     if (name.includes("#")) {
       const [splitName, splitTag] = name.split("#");
-      return { gameName: splitName, tagLine: splitTag || defaultTag };
+      return { gameName: splitName, tagLine: splitTag || defaultTag || "" };
     }
-    return { gameName: name, tagLine: defaultTag };
+    return { gameName: name, tagLine: defaultTag || "" };
   };
 
   const { gameName: finalGameName, tagLine: finalTagLine } = parseGameName(

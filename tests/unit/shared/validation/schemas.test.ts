@@ -1,12 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  regionSchema,
-  timezoneSchema,
   positiveNumberSchema,
-  settingsOptionsSchema,
+  recruitOptionsSchema,
+  regionSchema,
   riotAccountAddOptionsSchema,
   riotAccountRemoveOptionsSchema,
-  recruitOptionsSchema,
+  settingsOptionsSchema,
+  timezoneSchema,
 } from "../../../../src/shared/validation";
 
 describe("validation", () => {
@@ -63,6 +63,21 @@ describe("validation", () => {
 
     it("missing required fields", () => {
       const result = riotAccountAddOptionsSchema.safeParse({});
+      expect(result.success).toBe(false);
+    });
+
+    it("tag_line is optional when game_name contains #", () => {
+      const result = riotAccountAddOptionsSchema.parse({
+        game_name: "TestPlayer#123",
+      });
+      expect(result.game_name).toBe("TestPlayer#123");
+      expect(result.tag_line).toBeUndefined();
+    });
+
+    it("tag_line is required when game_name does not contain #", () => {
+      const result = riotAccountAddOptionsSchema.safeParse({
+        game_name: "TestPlayer",
+      });
       expect(result.success).toBe(false);
     });
 
