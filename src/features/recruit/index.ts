@@ -10,3 +10,6 @@ export type { ReminderEntry } from "./reminder";
 
 export { shouldCreateInstance } from "./scheduler";
 export type { Schedule, RecruitInstance } from "./scheduler";
+
+export { isRecruitExpired } from "./expiry";
+export type { RecruitExpiry } from "./expiry";
