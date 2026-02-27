@@ -49,6 +49,7 @@ describe("RateLimiter", () => {
       expect(result.waitTimeMs).toBeLessThanOrEqual(60000);
     });
 
+    // Skipped: requires 61s real-time wait. To enable, inject a clock into RateLimiter.
     it.skip("should clean up old requests outside the rate limit window", async () => {
       const limiter = new RateLimiter(db);
 
