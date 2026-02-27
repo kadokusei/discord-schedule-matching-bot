@@ -287,6 +287,17 @@ export const handlerRecruitDelete = async (
     return c.res("エラー: 募集が見つかりません");
   }
 
+  // スケジュール作成者のみ削除可能
+  const schedule = await db
+    .select()
+    .from(schema.schedules)
+    .where(eq(schema.schedules.id, recruit.scheduleId))
+    .get();
+
+  if (schedule && schedule.creatorId !== userId) {
+    return c.res("エラー: 募集の削除はスケジュール作成者のみ可能です");
+  }
+
   if (recruit.messageId) {
     await deleteDiscordMessage(c.env, recruit.channelId, recruit.messageId);
   }

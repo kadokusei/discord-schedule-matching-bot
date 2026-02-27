@@ -1,5 +1,5 @@
-import { buildRecruitEmbed } from "./embed";
 import type { Env } from "../../lib/types";
+import { buildRecruitEmbed } from "./embed";
 
 export async function postChannelMessage(
   env: Env,
@@ -124,6 +124,12 @@ export async function postRecruitMessage(
             style: 2,
             label: "キャンセル",
             custom_id: `recruit:cancel:${params.recruitId}`,
+          },
+          {
+            type: 2,
+            style: 4, // Danger
+            label: "削除",
+            custom_id: `recruit:delete:${params.recruitId}`,
           },
         ],
       },
