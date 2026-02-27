@@ -7,11 +7,16 @@ import {
   schedules,
 } from "../db/schema";
 import {
-  filterPendingReminders,
+  postChannelMessage,
+  postRecruitMessage,
+  updateDiscordMessage,
+} from "../features/discord";
+import {
   buildReminderMessage,
+  filterPendingReminders,
+  isRecruitExpired,
   shouldCreateInstance,
 } from "../features/recruit";
-import { postChannelMessage, postRecruitMessage } from "../features/discord";
 import type { Env } from "../lib/types";
 
 export async function handleScheduled(env: Env): Promise<void> {
@@ -79,6 +84,64 @@ export async function handleScheduled(env: Env): Promise<void> {
       targetDateLocal,
       status: "open",
     });
+  }
+
+  // 期限切れ募集のクローズ処理
+  const openRecruits = await db
+    .select()
+    .from(recruits)
+    .where(eq(recruits.status, "open"))
+    .all();
+
+  for (const recruit of openRecruits) {
+    const schedule = allSchedules.find((s) => s.id === recruit.scheduleId);
+    if (!schedule) continue;
+
+    const settings = settingsByGuild.get(recruit.guildId);
+    const tz = settings?.timezone ?? "Asia/Tokyo";
+
+    const expired = isRecruitExpired(
+      {
+        targetDateLocal: recruit.targetDateLocal,
+        postTimeHHmm: schedule.postTimeHHmm,
+        durationMin: schedule.durationMin,
+      },
+      tz,
+      nowUtc,
+    );
+
+    if (!expired) continue;
+
+    await db
+      .update(recruits)
+      .set({ status: "closed" })
+      .where(eq(recruits.id, recruit.id));
+
+    // Embed を更新してクローズ状態を反映
+    try {
+      const entries = await db
+        .select()
+        .from(recruitEntries)
+        .where(eq(recruitEntries.recruitId, recruit.id))
+        .all();
+
+      const confirmedEntries = entries.filter((e) => e.state === "confirmed");
+      const pendingEntries = entries.filter((e) => e.state === "pending_time");
+
+      await updateDiscordMessage(env, recruit.channelId, recruit.messageId, {
+        targetDateLocal: recruit.targetDateLocal,
+        postTimeHHmm: schedule.postTimeHHmm,
+        status: "cancelled",
+        confirmedCount: confirmedEntries.length,
+        pendingCount: pendingEntries.length,
+        timezone: tz,
+      });
+    } catch (error) {
+      console.error(
+        `[EXPIRY] Failed to update Discord message for recruit ${recruit.id}:`,
+        error,
+      );
+    }
   }
 
   // リマインド処理
