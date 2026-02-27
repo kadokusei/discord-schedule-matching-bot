@@ -170,7 +170,7 @@ export const handlerRiotAccountAdd = async (
     userId,
     db,
     c.env.HENRIKDEV_API_KEY,
-    { isJoining: false },
+    { isJoining: false, region },
   );
 
   if (!rankResult.success || !rankResult.account) {

@@ -385,6 +385,87 @@ describe("fetchValorantRankWithCache", () => {
     });
   });
 
+  describe("region parameter handling", () => {
+    it("should pass region to API call and store in DB", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockHenrikResponse,
+      } as Response);
+
+      const result = await fetchValorantRankWithCache(
+        gameName,
+        tagLine,
+        userId,
+        db,
+        apiKey,
+        { region: "na" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.fromCache).toBe(false);
+
+      // Verify API was called with correct region
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/na/pc/"),
+        expect.any(Object),
+      );
+
+      // Verify region stored in DB
+      const accounts = await db.select().from(schema.riotAccounts).all();
+      expect(accounts[0]?.region).toBe("na");
+    });
+
+    it("should default to 'ap' when region is not specified", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockHenrikResponse,
+      } as Response);
+
+      await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
+
+      // Verify API was called with default region 'ap'
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/ap/pc/"),
+        expect.any(Object),
+      );
+
+      // Verify default region stored in DB
+      const accounts = await db.select().from(schema.riotAccounts).all();
+      expect(accounts[0]?.region).toBe("ap");
+    });
+
+    it("should use stored region when updating existing account", async () => {
+      // Create a cached entry with region 'eu'
+      const expiredUtc = new Date(
+        Date.now() - 25 * 60 * 60 * 1000,
+      ).toISOString();
+      await db.insert(schema.riotAccounts).values({
+        id: crypto.randomUUID(),
+        userId,
+        gameName,
+        tagLine,
+        region: "eu",
+        rank: JSON.stringify(mockRankData),
+        createdAtUtc: expiredUtc,
+        lastFetchedAtUtc: expiredUtc,
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockHenrikResponse,
+      } as Response);
+
+      // Don't pass region — should use stored 'eu'
+      await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
+
+      // Verify API was called with stored region 'eu'
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/eu/pc/"),
+        expect.any(Object),
+      );
+    });
+  });
+
   describe("malformed JSON handling", () => {
     it("should handle malformed JSON in rank field gracefully", async () => {
       // Create an entry with malformed JSON
