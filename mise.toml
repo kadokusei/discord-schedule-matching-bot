@@ -1,7 +1,7 @@
 [tools]
-bun = "1.3.6"
-prek = "latest"
-actionlint = "latest"
+bun = "1.3.14"
+prek = "0.4.4"
+actionlint = "1.7.12"
 
 [tasks.setup-hooks]
 description = "Install git pre-commit hooks via prek"
