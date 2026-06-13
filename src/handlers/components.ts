@@ -8,7 +8,7 @@ import { and, eq } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
-import { deleteDiscordMessage, editOriginalInteractionResponse } from "../features/discord";
+import { editOriginalInteractionResponse } from "../features/discord";
 import { fetchValorantRankWithCache } from "../features/riot";
 import { buildTimeOptions } from "../shared/time";
 import type { Env, WaitUntilContext } from "../lib/types";
@@ -64,9 +64,6 @@ export const handleComponentInteraction = (
             break;
           case "cancel":
             await handleRecruitCancel(interaction, recruitId, env);
-            break;
-          case "delete":
-            await handleRecruitDelete(interaction, recruitId, env);
             break;
           default:
             await respond(env, interaction, { content: "エラー: 不明な操作です" });
@@ -260,60 +257,6 @@ const handleRecruitCancel = async (
   await recomputeMatch(env, recruitId, userId);
 
   await respond(env, interaction, { content: "参加を取り消しました。", components: [] });
-};
-
-const handleRecruitDelete = async (
-  interaction: APIMessageComponentInteraction,
-  recruitId: string,
-  env: Env,
-): Promise<void> => {
-  const userId = getUserId(interaction);
-
-  if (!recruitId || !userId) {
-    await respond(env, interaction, { content: "エラー: 必要な情報が不足しています" });
-    return;
-  }
-
-  const db = drizzle(env.DB, { schema });
-  const nowUtc = new Date().toISOString();
-
-  const recruit = await db
-    .select()
-    .from(schema.recruits)
-    .where(eq(schema.recruits.id, recruitId))
-    .get();
-
-  if (!recruit) {
-    await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
-    return;
-  }
-
-  // スケジュール作成者のみ削除可能
-  const schedule = await db
-    .select()
-    .from(schema.schedules)
-    .where(eq(schema.schedules.id, recruit.scheduleId))
-    .get();
-
-  if (schedule && schedule.creatorId !== userId) {
-    await respond(env, interaction, {
-      content: "エラー: 募集の削除はスケジュール作成者のみ可能です",
-    });
-    return;
-  }
-
-  if (recruit.messageId) {
-    await deleteDiscordMessage(env, recruit.channelId, recruit.messageId);
-  }
-
-  await db
-    .update(schema.recruits)
-    .set({ deletedBy: userId, deletedAtUtc: nowUtc, status: "deleted" })
-    .where(eq(schema.recruits.id, recruitId));
-
-  await db.delete(schema.recruitEntries).where(eq(schema.recruitEntries.recruitId, recruitId));
-
-  await respond(env, interaction, { content: "募集を削除しました。", components: [] });
 };
 
 type RankUpdateResult =

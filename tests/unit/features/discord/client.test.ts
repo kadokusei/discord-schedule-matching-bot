@@ -311,7 +311,7 @@ describe("Discord API Client", () => {
       expect(callArgs.content).toBe("【募集】2026-01-18 20:00");
     });
 
-    it("should include components with join, cancel, and delete buttons", async () => {
+    it("should include components with join and cancel buttons (no delete button)", async () => {
       const mockFetch = vi.fn(() =>
         Promise.resolve({
           ok: true,
@@ -334,12 +334,14 @@ describe("Discord API Client", () => {
       const callArgs = JSON.parse(getRequestBody(mockFetch));
       expect(callArgs.components).toBeDefined();
       expect(callArgs.components).toHaveLength(1);
-      expect(callArgs.components[0].components).toHaveLength(3);
+      // 削除ボタンは撤去され、参加・キャンセルの2ボタンのみ
+      expect(callArgs.components[0].components).toHaveLength(2);
       expect(callArgs.components[0].components[0].custom_id).toContain("recruit:join:");
       expect(callArgs.components[0].components[1].custom_id).toContain("recruit:cancel:");
-      expect(callArgs.components[0].components[2].custom_id).toContain("recruit:delete:");
-      // Delete button should be Danger style (4)
-      expect(callArgs.components[0].components[2].style).toBe(4);
+      const customIds = callArgs.components[0].components.map(
+        (c: { custom_id: string }) => c.custom_id,
+      );
+      expect(customIds.some((id: string) => id.includes("recruit:delete:"))).toBe(false);
     });
 
     it("should return message ID", async () => {

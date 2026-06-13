@@ -102,7 +102,7 @@ export async function updateDiscordMessage(
   }
 }
 
-/** 募集メッセージに付与する公開ボタン（参加 / キャンセル / 削除） */
+/** 募集メッセージに付与する公開ボタン（参加 / キャンセル）。削除は /schedule delete に一本化。 */
 export function buildRecruitComponents(
   recruitId: string,
 ): APIActionRowComponent<APIComponentInMessageActionRow>[] {
@@ -121,12 +121,6 @@ export function buildRecruitComponents(
           style: ButtonStyle.Secondary,
           label: "キャンセル",
           custom_id: `recruit:cancel:${recruitId}`,
-        },
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Danger,
-          label: "削除",
-          custom_id: `recruit:delete:${recruitId}`,
         },
       ],
     },
