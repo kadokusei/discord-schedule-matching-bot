@@ -153,7 +153,7 @@ const handleRecruitJoin = async (
     });
 
   // 公開募集メッセージの Embed を更新（参加状況の反映は recomputeMatch に一本化）
-  await recomputeMatch(env, recruitId);
+  await recomputeMatch(env, recruitId, userId);
 
   // 本人にだけ時間選択セレクトを ephemeral で提示
   await respond(env, interaction, {
@@ -228,7 +228,7 @@ const handleRecruitTime = async (
       },
     });
 
-  await recomputeMatch(env, recruitId);
+  await recomputeMatch(env, recruitId, userId);
 
   const localTime = new Date(selectedTime).toLocaleString("ja-JP", { timeZone: timezone });
   await respond(env, interaction, {
@@ -257,7 +257,7 @@ const handleRecruitCancel = async (
       and(eq(schema.recruitEntries.recruitId, recruitId), eq(schema.recruitEntries.userId, userId)),
     );
 
-  await recomputeMatch(env, recruitId);
+  await recomputeMatch(env, recruitId, userId);
 
   await respond(env, interaction, { content: "参加を取り消しました。", components: [] });
 };

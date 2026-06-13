@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { diffMatch, formatNotification, matchSignature } from "../../../../src/features/recruit";
+import {
+  diffMatch,
+  formatNotification,
+  matchSignature,
+  mentionTargets,
+} from "../../../../src/features/recruit";
+import type { Diff, Match } from "../../../../src/features/recruit";
 
 describe("diffMatch", () => {
   it("should detect created when no previous match", () => {
@@ -120,7 +126,9 @@ describe("formatNotification", () => {
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
     // 21:00Z は Asia/Tokyo では翌 06:00、メンバーは実メンション(<@id>)
-    expect(result).toBe("【確定】<@user1> <@user2> <@user3> <@user4> <@user5> 集合 06:00");
+    expect(result).toBe(
+      "【確定】\n🕘 集合時刻: 06:00\n👥 メンバー: <@user1> <@user2> <@user3> <@user4> <@user5>",
+    );
   });
 
   it("should format member change notification", () => {
@@ -137,8 +145,8 @@ describe("formatNotification", () => {
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
     // 21:00Z → JST 06:00
-    expect(result).toContain("メンバー変更: (前) <@user5> → (今) <@user6>");
-    expect(result).toContain("集合 06:00");
+    expect(result).toContain("👥 メンバー変更: (前) <@user5> → (今) <@user6>");
+    expect(result).toContain("🕘 集合時刻: 06:00");
   });
 
   it("should format time change notification", () => {
@@ -158,7 +166,7 @@ describe("formatNotification", () => {
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
     // 21:00Z→06:00 / 22:00Z→07:00 (JST)
-    expect(result).toContain("集合時刻: 06:00 → 07:00");
+    expect(result).toContain("🕘 集合時刻: 06:00 → 07:00");
   });
 
   it("should format both changes notification", () => {
@@ -177,8 +185,8 @@ describe("formatNotification", () => {
 
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
-    expect(result).toContain("メンバー変更: (前) <@user5> → (今) <@user6>");
-    expect(result).toContain("集合時刻: 06:00 → 07:00");
+    expect(result).toContain("👥 メンバー変更: (前) <@user5> → (今) <@user6>");
+    expect(result).toContain("🕘 集合時刻: 06:00 → 07:00");
   });
 
   it("should format cancelled notification", () => {
@@ -190,7 +198,48 @@ describe("formatNotification", () => {
 
     const result = formatNotification(diff, null, "Asia/Tokyo");
 
-    expect(result).toBe("【取消】確定条件（5人）未満になりました。");
+    expect(result).toBe("【取消】\n確定条件（5人）未満になりました。");
+  });
+});
+
+describe("mentionTargets", () => {
+  const members = ["user1", "user2", "user3", "user4", "user5"];
+  const nextMatch: Match = { memberIds: members, meetTimeUtc: "2026-01-16T21:00:00.000Z" };
+  const prevMatch: Match = { memberIds: members, meetTimeUtc: "2026-01-16T21:00:00.000Z" };
+
+  it("should return all next members for created (no trigger exclusion)", () => {
+    const diff: Diff = { type: "created", memberDiff: null, timeDiff: null };
+
+    expect(mentionTargets(diff, null, nextMatch, "user1")).toEqual(members);
+  });
+
+  it("should return all next members for updated (no trigger exclusion)", () => {
+    const diff: Diff = { type: "updated", memberDiff: null, timeDiff: null };
+
+    expect(mentionTargets(diff, prevMatch, nextMatch, "user1")).toEqual(members);
+  });
+
+  it("should exclude the trigger from prev members for cancelled", () => {
+    const diff: Diff = { type: "cancelled", memberDiff: null, timeDiff: null };
+
+    expect(mentionTargets(diff, prevMatch, null, "user3")).toEqual([
+      "user1",
+      "user2",
+      "user4",
+      "user5",
+    ]);
+  });
+
+  it("should return all prev members for cancelled when no trigger", () => {
+    const diff: Diff = { type: "cancelled", memberDiff: null, timeDiff: null };
+
+    expect(mentionTargets(diff, prevMatch, null)).toEqual(members);
+  });
+
+  it("should return empty array for unchanged", () => {
+    const diff: Diff = { type: "unchanged", memberDiff: null, timeDiff: null };
+
+    expect(mentionTargets(diff, prevMatch, nextMatch, "user1")).toEqual([]);
   });
 });
 

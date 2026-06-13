@@ -1,4 +1,4 @@
-export { diffMatch, formatNotification, matchSignature } from "./notification";
+export { diffMatch, formatNotification, matchSignature, mentionTargets } from "./notification";
 export type { Match, Diff } from "./notification";
 
 export { shouldSendReminder, buildReminderMessage, filterPendingReminders } from "./reminder";

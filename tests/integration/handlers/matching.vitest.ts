@@ -243,4 +243,122 @@ describe("recomputeMatch - Integration Tests", () => {
     );
     expect(notificationCall).toBeTruthy();
   });
+
+  it("should ping prev members except the trigger on cancellation", async () => {
+    const { recruitId } = await setupBase();
+
+    // 事前にマッチ済み状態を作る（5人 + signature）
+    const matchedMembers = ["user1", "user2", "user3", "user4", "user5"];
+    const baseTime = "2026-01-18T11:00:00.000Z";
+    await db
+      .update(schema.recruits)
+      .set({
+        status: "matched",
+        matchedMeetTimeUtc: baseTime,
+        matchedMemberIdsJson: JSON.stringify(matchedMembers),
+        lastNotifiedSignature: `${[...matchedMembers].sort().join(",")}|${baseTime}`,
+      })
+      .where(eq(schema.recruits.id, recruitId));
+
+    // user3 がキャンセルし、確定は 4 人に減る
+    for (const id of ["user1", "user2", "user4", "user5"]) {
+      await insertEntry(recruitId, id, "confirmed", baseTime);
+    }
+
+    const fetchCalls: { url: string; method: string; body?: string }[] = [];
+    const mockFetch = vi.fn((url: RequestInfo | URL, options?: RequestInit) => {
+      fetchCalls.push({
+        url: String(url),
+        method: options?.method ?? "GET",
+        body: options?.body?.toString(),
+      });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(""),
+      } as Response);
+    });
+    globalThis.fetch = mockFetch as typeof globalThis.fetch;
+
+    await recomputeMatch(env, recruitId, "user3");
+
+    const notification = fetchCalls.find(
+      (c) => c.method === "POST" && c.url.includes("/channels/test-channel/messages"),
+    );
+    expect(notification).toBeTruthy();
+
+    const payload = JSON.parse(notification?.body ?? "{}") as {
+      content: string;
+      allowed_mentions: { users?: string[] };
+    };
+
+    // 解消前メンバー（トリガーの user3 を除く）が本文と allowed_mentions に含まれる
+    expect(payload.content).toContain("【取消】");
+    for (const id of ["user1", "user2", "user4", "user5"]) {
+      expect(payload.content).toContain(`<@${id}>`);
+      expect(payload.allowed_mentions.users).toContain(id);
+    }
+    expect(payload.content).not.toContain("<@user3>");
+    expect(payload.allowed_mentions.users).not.toContain("user3");
+  });
+
+  it("should ping all current members on update (no trigger exclusion)", async () => {
+    const { recruitId } = await setupBase();
+
+    // 事前にマッチ済み状態（user1〜user5）
+    const prevMembers = ["user1", "user2", "user3", "user4", "user5"];
+    const baseTime = "2026-01-18T11:00:00.000Z";
+    await db
+      .update(schema.recruits)
+      .set({
+        status: "matched",
+        matchedMeetTimeUtc: baseTime,
+        matchedMemberIdsJson: JSON.stringify(prevMembers),
+        lastNotifiedSignature: `${[...prevMembers].sort().join(",")}|${baseTime}`,
+      })
+      .where(eq(schema.recruits.id, recruitId));
+
+    // user5 が抜け user6 が加わる（5人維持 → 更新）
+    const nextMembers = ["user1", "user2", "user3", "user4", "user6"];
+    for (const id of nextMembers) {
+      await insertEntry(recruitId, id, "confirmed", baseTime);
+    }
+
+    const fetchCalls: { url: string; method: string; body?: string }[] = [];
+    const mockFetch = vi.fn((url: RequestInfo | URL, options?: RequestInit) => {
+      fetchCalls.push({
+        url: String(url),
+        method: options?.method ?? "GET",
+        body: options?.body?.toString(),
+      });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(""),
+      } as Response);
+    });
+    globalThis.fetch = mockFetch as typeof globalThis.fetch;
+
+    // user6 がトリガーでも更新では除外しない
+    await recomputeMatch(env, recruitId, "user6");
+
+    const notification = fetchCalls.find(
+      (c) => c.method === "POST" && c.url.includes("/channels/test-channel/messages"),
+    );
+    expect(notification).toBeTruthy();
+
+    const payload = JSON.parse(notification?.body ?? "{}") as {
+      content: string;
+      allowed_mentions: { users?: string[] };
+    };
+
+    expect(payload.content).toContain("【更新】");
+    // 現在の確定メンバー全員（トリガー含む）が ping 対象
+    for (const id of nextMembers) {
+      expect(payload.allowed_mentions.users).toContain(id);
+    }
+    expect(payload.allowed_mentions.users).not.toContain("user5");
+  });
 });

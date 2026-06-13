@@ -78,11 +78,11 @@ export function formatNotification(diff: Diff, match: Match | null, tz: string):
 
   if (diff.type === "created" && match) {
     const members = match.memberIds.map(mention).join(" ");
-    return `【確定】${members} 集合 ${fmt(match.meetTimeUtc)}`;
+    return `【確定】\n🕘 集合時刻: ${fmt(match.meetTimeUtc)}\n👥 メンバー: ${members}`;
   }
 
   if (diff.type === "cancelled") {
-    return "【取消】確定条件（5人）未満になりました。";
+    return "【取消】\n確定条件（5人）未満になりました。";
   }
 
   if (diff.type === "updated") {
@@ -91,19 +91,41 @@ export function formatNotification(diff: Diff, match: Match | null, tz: string):
     if (diff.memberDiff) {
       const removed = diff.memberDiff.removed.map(mention).join(" ");
       const added = diff.memberDiff.added.map(mention).join(" ");
-      parts.push(`メンバー変更: (前) ${removed} → (今) ${added}`);
+      parts.push(`👥 メンバー変更: (前) ${removed} → (今) ${added}`);
     }
 
     if (diff.timeDiff) {
-      parts.push(`集合時刻: ${fmt(diff.timeDiff.prevUtc)} → ${fmt(diff.timeDiff.nextUtc)}`);
+      parts.push(`🕘 集合時刻: ${fmt(diff.timeDiff.prevUtc)} → ${fmt(diff.timeDiff.nextUtc)}`);
     } else if (match) {
-      parts.push(`集合 ${fmt(match.meetTimeUtc)}`);
+      parts.push(`🕘 集合時刻: ${fmt(match.meetTimeUtc)}`);
     }
 
-    return `【更新】${parts.join(" / ")}`;
+    return `【更新】\n${parts.join("\n")}`;
   }
 
   return "";
+}
+
+/**
+ * 通知で ping すべきメンバー ID の一覧を算出する。
+ * - created / updated: 現在のマッチメンバー全員（トリガー除外なし）
+ * - cancelled: 解消前メンバーから、それをトリガーした本人を除外
+ */
+export function mentionTargets(
+  diff: Diff,
+  prev: Match | null,
+  next: Match | null,
+  triggeredBy?: string,
+): string[] {
+  if (diff.type === "cancelled") {
+    return (prev?.memberIds ?? []).filter((id) => id !== triggeredBy);
+  }
+
+  if (diff.type === "created" || diff.type === "updated") {
+    return next?.memberIds ?? [];
+  }
+
+  return [];
 }
 
 export function matchSignature(match: Match | null): string {

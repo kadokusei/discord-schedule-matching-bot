@@ -7,7 +7,13 @@ import {
   updateDiscordMessage,
 } from "../features/discord";
 import { type Entry, computeBestParty } from "../features/matching";
-import { type Match, diffMatch, formatNotification, matchSignature } from "../features/recruit";
+import {
+  type Match,
+  diffMatch,
+  formatNotification,
+  matchSignature,
+  mentionTargets,
+} from "../features/recruit";
 import type { Env } from "../lib/types";
 
 type DiscordUpdateResult = { success: true } | { success: false; error: Error };
@@ -36,7 +42,11 @@ const attemptDiscordUpdate = async (
   }
 };
 
-export async function recomputeMatch(env: Env, recruitId: string): Promise<void> {
+export async function recomputeMatch(
+  env: Env,
+  recruitId: string,
+  triggeredBy?: string,
+): Promise<void> {
   const db = drizzle(env.DB);
 
   const entries = await db
@@ -149,7 +159,7 @@ export async function recomputeMatch(env: Env, recruitId: string): Promise<void>
       })
       .where(eq(recruits.id, recruitId));
 
-    await notifyMatchUpdate(env, recruit, previousMatch, null, timezone);
+    await notifyMatchUpdate(env, recruit, previousMatch, null, timezone, triggeredBy);
     return;
   }
 
@@ -203,6 +213,7 @@ export async function recomputeMatch(env: Env, recruitId: string): Promise<void>
       meetTimeUtc: bestParty.meetTimeUtc,
     },
     timezone,
+    triggeredBy,
   );
 }
 
@@ -237,6 +248,7 @@ async function notifyMatchUpdate(
   prev: Match | null,
   next: Match | null,
   timezone: string,
+  triggeredBy?: string,
 ): Promise<void> {
   const diff = diffMatch(prev, next);
 
@@ -261,12 +273,23 @@ async function notifyMatchUpdate(
     return;
   }
 
-  // 確定/更新通知は対象メンバーのみ ping する（取消は ping しない）
+  // ping 対象（取消は本人を除外、確定/更新は対象メンバー全員）
+  const targets = mentionTargets(diff, prev, next, triggeredBy);
+
+  // 取消/更新の本文には全対象の <@id> が含まれないため、先頭に ping 行を付与する。
+  // 確定の本文は既に全メンバーの <@id> を含むため付与不要。
+  const needsMentionLine = diff.type === "cancelled" || diff.type === "updated";
+  const mentionLine =
+    needsMentionLine && targets.length > 0
+      ? `${targets.map((id) => `<@${id}>`).join(" ")}\n`
+      : "";
+  const content = `${mentionLine}${message}`;
+
   await postChannelMessage(
     env,
     recruit.channelId,
-    message,
-    next ? { users: next.memberIds } : { parse: [] },
+    content,
+    targets.length > 0 ? { users: targets } : { parse: [] },
   );
 
   const db = drizzle(env.DB);
