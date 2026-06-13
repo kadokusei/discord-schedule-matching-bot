@@ -82,7 +82,7 @@ export function formatNotification(diff: Diff, match: Match | null, tz: string):
   }
 
   if (diff.type === "cancelled") {
-    return "【取消】\n確定条件（5人）未満になりました。";
+    return "【取消】\n確定条件を満たさなくなりました。";
   }
 
   if (diff.type === "updated") {

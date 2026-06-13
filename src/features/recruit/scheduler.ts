@@ -1,9 +1,51 @@
+import { buildTimeOptions } from "../../shared/time";
+
 export interface Schedule {
   postTimeHHmm: string;
 }
 
 export interface RecruitInstance {
   targetDateLocal: string;
+}
+
+export interface IntervalSchedule {
+  postTimeHHmm: string;
+  intervalMin: number;
+  durationMin: number;
+}
+
+/**
+ * いま到来している interval スロット境界（UTC ISO8601）を返す。
+ * - 募集枠は postTime から intervalMin 刻みで durationMin まで。
+ * - now 以下で最も新しいスロットを返す。
+ * - 最初のスロット前、または最終スロットを過ぎた場合は null（提案対象外）。
+ */
+export function currentIntervalSlotUtc(
+  recruit: { targetDateLocal: string },
+  schedule: IntervalSchedule,
+  tz: string,
+  nowUtc: Date,
+): string | null {
+  const slots = buildTimeOptions(
+    recruit.targetDateLocal,
+    schedule.postTimeHHmm,
+    schedule.intervalMin,
+    schedule.durationMin,
+    tz,
+  ).map((o) => o.value);
+
+  if (slots.length === 0) return null;
+
+  const nowMs = nowUtc.getTime();
+  const finalSlotMs = new Date(slots[slots.length - 1]).getTime();
+
+  // 募集枠の最終スロットを過ぎたら対象外
+  if (nowMs > finalSlotMs) return null;
+
+  const pastSlots = slots.filter((s) => new Date(s).getTime() <= nowMs);
+  if (pastSlots.length === 0) return null; // 最初のスロット前
+
+  return pastSlots[pastSlots.length - 1];
 }
 
 export function shouldCreateInstance(

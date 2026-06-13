@@ -198,7 +198,7 @@ describe("formatNotification", () => {
 
     const result = formatNotification(diff, null, "Asia/Tokyo");
 
-    expect(result).toBe("【取消】\n確定条件（5人）未満になりました。");
+    expect(result).toBe("【取消】\n確定条件を満たさなくなりました。");
   });
 });
 
