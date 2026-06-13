@@ -1,14 +1,142 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { guildSettings, recruitEntries, recruits, schedules } from "../db/schema";
-import { postChannelMessage, postRecruitMessage, updateDiscordMessage } from "../features/discord";
+import { guildSettings, recruitEntries, recruits, riotAccounts, schedules } from "../db/schema";
+import {
+  postChannelMessage,
+  postRecruitMessage,
+  postSmallPartyProposal,
+  updateDiscordMessage,
+} from "../features/discord";
 import {
   buildReminderMessage,
+  buildSmallPartyProposal,
+  currentIntervalSlotUtc,
+  formatRegisterNudge,
+  formatSmallPartyProposal,
   isRecruitExpired,
   shouldCreateInstance,
   shouldSendReminder,
 } from "../features/recruit";
+import { rankStringFromStored } from "../features/riot";
 import type { Env } from "../lib/types";
+
+type DrizzleDb = ReturnType<typeof drizzle>;
+type ScheduleRow = typeof schedules.$inferSelect;
+type GuildSettingRow = typeof guildSettings.$inferSelect;
+
+/**
+ * 各 open 募集について、interval スロット境界が到来していれば、その時刻までに参加可能な
+ * 確定者から成立する 2〜3 人パーティを探し、候補メンバーへ同意ボタン付きの提案を投稿する。
+ * 同一スロットでの重複提案は smallPartyProposedAtUtc で抑制する。
+ */
+async function proposeSmallParties(
+  env: Env,
+  db: DrizzleDb,
+  allSchedules: ScheduleRow[],
+  settingsByGuild: Map<string, GuildSettingRow>,
+  nowUtc: Date,
+): Promise<void> {
+  const openRecruits = await db.select().from(recruits).where(eq(recruits.status, "open")).all();
+
+  for (const recruit of openRecruits) {
+    if (recruit.smallPartyStatus === "confirmed") continue;
+
+    const schedule = allSchedules.find((s) => s.id === recruit.scheduleId);
+    if (!schedule) continue;
+
+    const tz = settingsByGuild.get(recruit.guildId)?.timezone ?? "Asia/Tokyo";
+
+    const slotUtc = currentIntervalSlotUtc(
+      { targetDateLocal: recruit.targetDateLocal },
+      {
+        postTimeHHmm: schedule.postTimeHHmm,
+        intervalMin: schedule.intervalMin,
+        durationMin: schedule.durationMin,
+      },
+      tz,
+      nowUtc,
+    );
+
+    if (!slotUtc) continue;
+    // 同一スロットで既に提案済みなら抑制
+    if (recruit.smallPartyProposedAtUtc === slotUtc) continue;
+
+    const entries = await db
+      .select()
+      .from(recruitEntries)
+      .where(eq(recruitEntries.recruitId, recruit.id))
+      .all();
+
+    const confirmed = entries
+      .filter((e) => e.state === "confirmed" && e.availableFromUtc)
+      .map((e) => ({
+        userId: e.userId,
+        availableFromUtc: e.availableFromUtc as string,
+        createdAtUtc: e.createdAtUtc,
+      }));
+
+    if (confirmed.length < 2) continue;
+
+    // 候補ユーザーの全アカウントのランクを収集
+    const userIds = confirmed.map((e) => e.userId);
+    const accounts = await db
+      .select()
+      .from(riotAccounts)
+      .where(inArray(riotAccounts.userId, userIds))
+      .all();
+
+    const ranksByUser = new Map<string, string[]>();
+    for (const account of accounts) {
+      const rank = rankStringFromStored(account.rank);
+      if (!rank) continue;
+      ranksByUser.set(account.userId, [...(ranksByUser.get(account.userId) ?? []), rank]);
+    }
+
+    const proposal = buildSmallPartyProposal(confirmed, ranksByUser, slotUtc);
+    if (!proposal) continue;
+
+    const { party, unrankedUserIds } = proposal;
+
+    try {
+      await postSmallPartyProposal(
+        env,
+        recruit.channelId,
+        recruit.id,
+        formatSmallPartyProposal(party.memberIds, party.meetTimeUtc, party.size, tz),
+        party.memberIds,
+      );
+    } catch (error) {
+      console.error(`[SMALL_PARTY] Failed to post proposal for recruit ${recruit.id}:`, error);
+      continue;
+    }
+
+    // 提案を保存（同意は空で開始、対象スロットを記録）
+    await db
+      .update(recruits)
+      .set({
+        smallPartyStatus: "proposed",
+        smallPartyMemberIdsJson: JSON.stringify(party.memberIds),
+        smallPartyMeetTimeUtc: party.meetTimeUtc,
+        smallPartyConsentJson: "[]",
+        smallPartyProposedAtUtc: slotUtc,
+      })
+      .where(eq(recruits.id, recruit.id));
+
+    // ランク未登録の参加可能者には登録を促す
+    if (unrankedUserIds.length > 0) {
+      try {
+        await postChannelMessage(env, recruit.channelId, formatRegisterNudge(unrankedUserIds), {
+          users: unrankedUserIds,
+        });
+      } catch (error) {
+        console.error(
+          `[SMALL_PARTY] Failed to post register nudge for recruit ${recruit.id}:`,
+          error,
+        );
+      }
+    }
+  }
+}
 
 export async function handleScheduled(env: Env): Promise<void> {
   const db = drizzle(env.DB);
@@ -122,6 +250,9 @@ export async function handleScheduled(env: Env): Promise<void> {
       console.error(`[EXPIRY] Failed to update Discord message for recruit ${recruit.id}:`, error);
     }
   }
+
+  // 少人数(2〜3人)パーティ提案パス（interval スロット境界契機）
+  await proposeSmallParties(env, db, allSchedules, settingsByGuild, nowUtc);
 
   // リマインド処理
   const pendingEntries = await db

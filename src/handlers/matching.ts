@@ -61,6 +61,34 @@ export async function recomputeMatch(
     return;
   }
 
+  // 少人数提案中に提案メンバーの誰かが確定状態を外れたら提案を無効化する
+  if (recruit.smallPartyStatus === "proposed") {
+    const confirmedUserIds = new Set(
+      entries.filter((e) => e.state === "confirmed" && e.availableFromUtc).map((e) => e.userId),
+    );
+    let proposedMembers: string[] = [];
+    try {
+      const parsed = JSON.parse(recruit.smallPartyMemberIdsJson ?? "[]");
+      proposedMembers = Array.isArray(parsed) ? (parsed as string[]) : [];
+    } catch {
+      proposedMembers = [];
+    }
+    const stillValid =
+      proposedMembers.length > 0 && proposedMembers.every((id) => confirmedUserIds.has(id));
+    if (!stillValid) {
+      await db
+        .update(recruits)
+        .set({
+          smallPartyStatus: null,
+          smallPartyMemberIdsJson: null,
+          smallPartyMeetTimeUtc: null,
+          smallPartyConsentJson: null,
+          smallPartyProposedAtUtc: null,
+        })
+        .where(eq(recruits.id, recruitId));
+    }
+  }
+
   // schedule を取得して postTimeHHmm を取得
   const schedule = await db
     .select()
@@ -217,6 +245,107 @@ export async function recomputeMatch(
   );
 }
 
+/**
+ * recruit に保存済みの少人数(2〜3人)パーティ提案を確定させる。
+ * recomputeMatch は確定者<5でopenに戻すため、少人数確定では使わずこちらを使う。
+ * 提案メンバー全員の同意が揃った後に呼ぶ前提。
+ */
+export async function finalizeSmallParty(
+  env: Env,
+  recruitId: string,
+  triggeredBy?: string,
+): Promise<void> {
+  const db = drizzle(env.DB);
+
+  const recruit = await db.select().from(recruits).where(eq(recruits.id, recruitId)).get();
+  if (!recruit || recruit.smallPartyStatus !== "proposed") {
+    return;
+  }
+
+  const meetTimeUtc = recruit.smallPartyMeetTimeUtc;
+  let memberIds: string[];
+  try {
+    memberIds = JSON.parse(recruit.smallPartyMemberIdsJson ?? "[]") as string[];
+  } catch {
+    return;
+  }
+  if (!Array.isArray(memberIds) || memberIds.length === 0 || !meetTimeUtc) {
+    return;
+  }
+
+  const schedule = await db
+    .select()
+    .from(schedules)
+    .where(eq(schedules.id, recruit.scheduleId))
+    .get();
+  const postTimeHHmm = schedule?.postTimeHHmm ?? "20:00";
+
+  const settings = await db
+    .select()
+    .from(guildSettings)
+    .where(eq(guildSettings.guildId, recruit.guildId))
+    .get();
+  const timezone = settings?.timezone ?? "Asia/Tokyo";
+
+  const entries = await db
+    .select()
+    .from(recruitEntries)
+    .where(eq(recruitEntries.recruitId, recruitId))
+    .all();
+
+  const confirmedCount = entries.filter((e) => e.state === "confirmed").length;
+  const pendingCount = entries.filter((e) => e.state === "pending_time").length;
+  const confirmedUsers = entries
+    .filter(
+      (e): e is typeof e & { availableFromUtc: NonNullable<typeof e.availableFromUtc> } =>
+        e.state === "confirmed" && e.availableFromUtc !== null,
+    )
+    .map((e) => ({ userId: e.userId, availableFromUtc: e.availableFromUtc }));
+  const pendingUserIds = entries.filter((e) => e.state === "pending_time").map((e) => e.userId);
+
+  const previousMatch = buildMatchFromRecruit(recruit);
+  const nextMatch = { memberIds, meetTimeUtc };
+  const signature = matchSignature(nextMatch);
+
+  const discordResult = await attemptDiscordUpdate(env, recruit.channelId, recruit.messageId, {
+    targetDateLocal: recruit.targetDateLocal,
+    postTimeHHmm,
+    status: "matched",
+    confirmedCount,
+    pendingCount,
+    confirmedUsers,
+    pendingUserIds,
+    matchedMembers: memberIds,
+    matchedTime: new Date(meetTimeUtc).toLocaleTimeString("ja-JP", {
+      timeZone: timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    timezone,
+  });
+
+  if (!discordResult.success) {
+    console.error(
+      `[SMALL_PARTY] Failed to update Discord message for recruit ${recruitId}:`,
+      discordResult.error.message,
+    );
+    return;
+  }
+
+  await db
+    .update(recruits)
+    .set({
+      status: "matched",
+      matchSignature: signature,
+      matchedMeetTimeUtc: meetTimeUtc,
+      matchedMemberIdsJson: JSON.stringify(memberIds),
+      smallPartyStatus: "confirmed",
+    })
+    .where(eq(recruits.id, recruitId));
+
+  await notifyMatchUpdate(env, recruit, previousMatch, nextMatch, timezone, triggeredBy);
+}
+
 type RecruitMatchSource = {
   matchedMeetTimeUtc?: string | null;
   matchedMemberIdsJson?: string | null;
@@ -280,9 +409,7 @@ async function notifyMatchUpdate(
   // 確定の本文は既に全メンバーの <@id> を含むため付与不要。
   const needsMentionLine = diff.type === "cancelled" || diff.type === "updated";
   const mentionLine =
-    needsMentionLine && targets.length > 0
-      ? `${targets.map((id) => `<@${id}>`).join(" ")}\n`
-      : "";
+    needsMentionLine && targets.length > 0 ? `${targets.map((id) => `<@${id}>`).join(" ")}\n` : "";
   const content = `${mentionLine}${message}`;
 
   await postChannelMessage(

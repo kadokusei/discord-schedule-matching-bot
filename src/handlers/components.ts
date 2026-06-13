@@ -9,10 +9,11 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import { editOriginalInteractionResponse } from "../features/discord";
+import { applyConsent } from "../features/recruit";
 import { fetchValorantRankWithCache } from "../features/riot";
 import { buildTimeOptions } from "../shared/time";
 import type { Env, WaitUntilContext } from "../lib/types";
-import { recomputeMatch } from "./matching";
+import { finalizeSmallParty, recomputeMatch } from "./matching";
 
 const getUserId = (interaction: APIMessageComponentInteraction): string =>
   interaction.member?.user?.id ?? interaction.user?.id ?? "";
@@ -64,6 +65,9 @@ export const handleComponentInteraction = (
             break;
           case "cancel":
             await handleRecruitCancel(interaction, recruitId, env);
+            break;
+          case "party_confirm":
+            await handleSmallPartyConfirm(interaction, recruitId, env);
             break;
           default:
             await respond(env, interaction, { content: "エラー: 不明な操作です" });
@@ -257,6 +261,75 @@ const handleRecruitCancel = async (
   await recomputeMatch(env, recruitId, userId);
 
   await respond(env, interaction, { content: "参加を取り消しました。", components: [] });
+};
+
+const parseJsonArray = (json: string | null): string[] => {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+};
+
+const handleSmallPartyConfirm = async (
+  interaction: APIMessageComponentInteraction,
+  recruitId: string,
+  env: Env,
+): Promise<void> => {
+  const userId = getUserId(interaction);
+
+  if (!recruitId || !userId) {
+    await respond(env, interaction, { content: "エラー: 必要な情報が不足しています" });
+    return;
+  }
+
+  const db = drizzle(env.DB, { schema });
+
+  const recruit = await db
+    .select()
+    .from(schema.recruits)
+    .where(eq(schema.recruits.id, recruitId))
+    .get();
+
+  if (!recruit) {
+    await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
+    return;
+  }
+
+  if (recruit.smallPartyStatus !== "proposed") {
+    await respond(env, interaction, { content: "この確定提案は現在有効ではありません。" });
+    return;
+  }
+
+  const memberIds = parseJsonArray(recruit.smallPartyMemberIdsJson);
+  const currentConsent = parseJsonArray(recruit.smallPartyConsentJson);
+
+  const result = applyConsent(memberIds, currentConsent, userId);
+
+  if (!result.isMember) {
+    await respond(env, interaction, {
+      content: "あなたはこの確定の対象メンバーではありません。",
+    });
+    return;
+  }
+
+  await db
+    .update(schema.recruits)
+    .set({ smallPartyConsentJson: JSON.stringify(result.consent) })
+    .where(eq(schema.recruits.id, recruitId));
+
+  if (result.allConfirmed) {
+    await finalizeSmallParty(env, recruitId, userId);
+    await respond(env, interaction, { content: "全員の同意が揃いました。確定しました！" });
+    return;
+  }
+
+  const remaining = memberIds.length - result.consent.length;
+  await respond(env, interaction, {
+    content: `同意しました。残り ${remaining} 人の同意待ちです。`,
+  });
 };
 
 type RankUpdateResult =
