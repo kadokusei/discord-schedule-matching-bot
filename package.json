@@ -17,9 +17,9 @@
     "db:studio": "drizzle-kit studio",
     "secrets:setup": "cp .dev.vars.example .dev.vars && echo '✅ .dev.vars created. Please edit with your secrets.'",
     "secrets:staging:list": "wrangler secret list --env staging",
-    "secrets:staging:put": "wrangler secret put DISCORD_PUBLIC_KEY --env staging && wrangler secret put DISCORD_BOT_TOKEN --env staging && wrangler secret put HENRIKDEV_API_KEY --env staging",
+    "secrets:staging:put": "wrangler secret put DISCORD_PUBLIC_KEY --env staging && wrangler secret put DISCORD_BOT_TOKEN --env staging && wrangler secret put DISCORD_APPLICATION_ID --env staging && wrangler secret put HENRIKDEV_API_KEY --env staging",
     "secrets:prod:list": "wrangler secret list --env production",
-    "secrets:prod:put": "wrangler secret put DISCORD_PUBLIC_KEY --env production && wrangler secret put DISCORD_BOT_TOKEN --env production && wrangler secret put HENRIKDEV_API_KEY --env production"
+    "secrets:prod:put": "wrangler secret put DISCORD_PUBLIC_KEY --env production && wrangler secret put DISCORD_BOT_TOKEN --env production && wrangler secret put DISCORD_APPLICATION_ID --env production && wrangler secret put HENRIKDEV_API_KEY --env production"
   },
   "dependencies": {
     "discord-api-types": "^0.38.48",
