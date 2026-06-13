@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
 import type { APIApplicationCommandInteraction } from "discord-api-types/v10";
+import { PermissionFlagsBits } from "discord-api-types/v10";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +14,7 @@ const buildCommandInteraction = (
   commandName: string,
   subName: string,
   options: SubOption[],
-  ctxIds: { guildId?: string; channelId?: string; userId?: string } = {},
+  ctxIds: { guildId?: string; channelId?: string; userId?: string; permissions?: string } = {},
 ): APIApplicationCommandInteraction =>
   ({
     type: 2,
@@ -22,7 +23,9 @@ const buildCommandInteraction = (
     token: "interaction-token",
     guild_id: ctxIds.guildId,
     channel: ctxIds.channelId ? { id: ctxIds.channelId } : undefined,
-    member: ctxIds.userId ? { user: { id: ctxIds.userId } } : undefined,
+    member: ctxIds.userId
+      ? { user: { id: ctxIds.userId }, permissions: ctxIds.permissions }
+      : undefined,
     data: {
       id: "cmd-id",
       name: commandName,
@@ -272,7 +275,7 @@ describe("Command Handlers - Integration Tests", () => {
       expect(deleteCalls.length).toBe(1);
     });
 
-    it("should allow deletion by a non-creator (anyone can delete)", async () => {
+    it("should reject deletion by a non-creator without manage permissions", async () => {
       globalThis.fetch = vi.fn(() =>
         Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("") } as Response),
       );
@@ -284,6 +287,30 @@ describe("Command Handlers - Integration Tests", () => {
         buildCommandInteraction("schedule", "delete", [{ name: "id", value: scheduleId }], {
           guildId: "test-guild",
           userId: "different-user",
+          permissions: PermissionFlagsBits.SendMessages.toString(),
+        }),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain(
+        "権限がありません",
+      );
+      // 削除されず残っていること
+      expect(await db.select().from(schema.schedules).all()).toHaveLength(1);
+    });
+
+    it("should allow deletion by a non-creator who has ManageGuild", async () => {
+      globalThis.fetch = vi.fn(() =>
+        Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("") } as Response),
+      );
+
+      const scheduleId = "sched-2b";
+      await insertSchedule(scheduleId, { creatorId: "owner-user" });
+
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "delete", [{ name: "id", value: scheduleId }], {
+          guildId: "test-guild",
+          userId: "admin-user",
+          permissions: PermissionFlagsBits.ManageGuild.toString(),
         }),
       );
 

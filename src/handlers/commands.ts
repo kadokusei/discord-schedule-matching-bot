@@ -14,7 +14,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import { deleteDiscordMessage, editOriginalInteractionResponse } from "../features/discord";
-import { fetchValorantRankWithCache, formatRankLabel } from "../features/riot";
+import { buildRiotAddOutcome, fetchValorantRankWithCache } from "../features/riot";
+import { canManageSchedule } from "../shared/discord/permissions";
 import type { Env, WaitUntilContext } from "../lib/types";
 import * as v from "../shared/validation";
 
@@ -52,7 +53,7 @@ const SCHEDULE_HELP = [
   "",
   "▸ **/schedule delete** — 定期予定を削除します",
   "　・id（必須）: 削除する定期予定（入力時に候補から選択できます）",
-  "　※ サーバー内の誰でも削除できます。関連する募集メッセージも削除されます。",
+  "　※ 削除できるのは作成者本人またはサーバー管理者のみです。関連する募集メッセージも削除されます。",
   "",
   "▸ **/schedule help** — このヘルプを表示します",
 ].join("\n");
@@ -297,7 +298,7 @@ const handleScheduleDelete = async (
   const { id } = parsed.data;
   const db = drizzle(env.DB, { schema });
 
-  // guild 内の予定のみ対象（権限チェックは行わない＝サーバー内の誰でも削除可）
+  // guild 内の予定のみ対象
   const schedule = await db
     .select()
     .from(schema.schedules)
@@ -306,6 +307,19 @@ const handleScheduleDelete = async (
 
   if (!schedule) {
     return ephemeral("エラー: 指定された定期予定が見つかりません");
+  }
+
+  // 認可: 作成者本人またはサーバー管理者(ManageGuild/Administrator)のみ削除可
+  if (
+    !canManageSchedule({
+      invokerId: getUserId(interaction),
+      creatorId: schedule.creatorId,
+      memberPermissions: interaction.member?.permissions,
+    })
+  ) {
+    return ephemeral(
+      "エラー: この定期予定を削除する権限がありません（作成者またはサーバー管理者のみ）",
+    );
   }
 
   const relatedRecruits = await db
@@ -384,12 +398,12 @@ const handleRiotAccountAdd = async (
             { isJoining: false, region },
           );
 
-          if (!rankResult.success || !rankResult.account) {
-            return `エラー: ${rankResult.error ?? "アカウントが見つかりません"}`;
+          // 上流APIの生エラーはユーザーに出さず、汎用文言＋ログに分離する
+          const outcome = buildRiotAddOutcome(rankResult);
+          if (outcome.logDetail) {
+            console.error("[RIOT_ADD] fetch failed:", outcome.logDetail);
           }
-
-          const cacheMessage = rankResult.fromCache ? " (キャッシュ)" : "";
-          return `アカウントを登録しました${cacheMessage}: ${formatRankLabel(rankResult.account)}`;
+          return outcome.message;
         } catch (error) {
           console.error("[RIOT_ADD] Failed:", error);
           return "エラー: アカウント登録中に問題が発生しました";
