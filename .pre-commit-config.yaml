@@ -1,0 +1,20 @@
+repos:
+  - repo: local
+    hooks:
+      - id: oxlint
+        name: oxlint
+        entry: mise exec -- bun run lint
+        language: system
+        pass_filenames: false
+        files: ^(src|tests|scripts)/.*\.(ts|tsx|js|jsx)$
+      - id: oxfmt
+        name: oxfmt (check)
+        entry: mise exec -- bun run format:check
+        language: system
+        pass_filenames: false
+        files: ^(src|tests|scripts)/.*\.(ts|tsx|js|jsx)$
+      - id: actionlint
+        name: actionlint
+        entry: mise exec -- actionlint
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
