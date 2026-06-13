@@ -49,6 +49,18 @@ describe("RateLimiter", () => {
       expect(result.waitTimeMs).toBeLessThanOrEqual(60000);
     });
 
+    it("should never record more than the limit even when called beyond it", async () => {
+      const limiter = new RateLimiter(db);
+
+      // 上限(25)を超えて 30 回呼んでも、記録される行数は上限ちょうどに収まる
+      for (let i = 0; i < 30; i++) {
+        await limiter.checkRateLimit();
+      }
+
+      const rows = await db.select().from(schema.apiRateLimits);
+      expect(rows.length).toBe(25);
+    });
+
     // Skipped: requires 61s real-time wait. To enable, inject a clock into RateLimiter.
     it.skip("should clean up old requests outside the rate limit window", async () => {
       const limiter = new RateLimiter(db);
