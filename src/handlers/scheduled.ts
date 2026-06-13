@@ -185,22 +185,47 @@ export async function handleScheduled(env: Env): Promise<void> {
     const targetDateLocal = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
     const recruitId = crypto.randomUUID();
-    const messageId = await postRecruitMessage(env, schedule.channelId, {
-      recruitId,
-      targetDateLocal,
-      postTimeHHmm: schedule.postTimeHHmm,
-      template: schedule.template,
-    });
 
-    await db.insert(recruits).values({
-      id: recruitId,
-      scheduleId: schedule.id,
-      guildId: schedule.guildId,
-      channelId: schedule.channelId,
-      messageId,
-      targetDateLocal,
-      status: "open",
-    });
+    // 予約先行（reserve-then-post）: 先に DB 行を確保してから Discord 投稿する。
+    // (schedule_id, target_date_local) の一意制約により、cron の重複起動やリトライで
+    // 2 つの起動が同時に「未作成」と判断しても、行を確保できるのは 1 つだけになる。
+    // 確保に失敗（=既に他起動が作成済み）したら何もしない（冪等）。
+    const reserved = await db
+      .insert(recruits)
+      .values({
+        id: recruitId,
+        scheduleId: schedule.id,
+        guildId: schedule.guildId,
+        channelId: schedule.channelId,
+        messageId: "", // 投稿成功後に更新するプレースホルダ
+        targetDateLocal,
+        status: "open",
+      })
+      .onConflictDoNothing({ target: [recruits.scheduleId, recruits.targetDateLocal] })
+      .returning({ id: recruits.id });
+
+    if (reserved.length === 0) {
+      // 既に同一スケジュール・同一日の募集が存在する → 二重投稿しない
+      continue;
+    }
+
+    // 予約できた起動だけが Discord に投稿する。投稿失敗時は予約行を削除して孤児行を残さない。
+    try {
+      const messageId = await postRecruitMessage(env, schedule.channelId, {
+        recruitId,
+        targetDateLocal,
+        postTimeHHmm: schedule.postTimeHHmm,
+        template: schedule.template,
+      });
+
+      await db.update(recruits).set({ messageId }).where(eq(recruits.id, recruitId));
+    } catch (error) {
+      console.error(
+        `[SCHEDULE_CREATE] Failed to post recruit message for schedule ${schedule.id} (${targetDateLocal}); rolling back reservation:`,
+        error,
+      );
+      await db.delete(recruits).where(eq(recruits.id, recruitId));
+    }
   }
 
   // 期限切れ募集のクローズ処理

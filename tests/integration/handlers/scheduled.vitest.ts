@@ -8,6 +8,7 @@ import {
   filterPendingReminders,
   shouldCreateInstance,
 } from "../../../src/features/recruit";
+import { handleScheduled } from "../../../src/handlers/scheduled";
 
 describe("handleScheduled - Integration Tests", () => {
   const db = drizzle(env.DB, { schema });
@@ -585,6 +586,112 @@ describe("handleScheduled - Integration Tests", () => {
       expect(reminderTargets.some((t) => t.userId === "user1")).toBe(true);
       expect(reminderTargets.some((t) => t.userId === "user2")).toBe(true);
       expect(reminderTargets.some((t) => t.userId === "user3")).toBe(false);
+    });
+  });
+
+  describe("idempotent creation (reserve-then-post)", () => {
+    // post_time を "00:00" にして、当日分の作成条件（now >= post_time かつ未作成）を確実に満たす
+    const setupDueSchedule = async (scheduleId: string) => {
+      await db.delete(schema.recruitEntries);
+      await db.delete(schema.recruits);
+      await db.delete(schema.schedules);
+      await db.delete(schema.guildSettings);
+
+      await db.insert(schema.guildSettings).values({
+        id: crypto.randomUUID(),
+        guildId: "idem-guild",
+        timezone: "Asia/Tokyo",
+        defaultIntervalMin: 30,
+        defaultDurationMin: 360,
+        defaultTemplate: "",
+      });
+      await db.insert(schema.schedules).values({
+        id: scheduleId,
+        guildId: "idem-guild",
+        channelId: "idem-channel",
+        creatorId: "creator",
+        postTimeHHmm: "00:00",
+        intervalMin: 30,
+        durationMin: 360,
+        template: "",
+        active: 1,
+      });
+    };
+
+    const postMessageCalls = (mock: ReturnType<typeof vi.fn>) =>
+      mock.mock.calls.filter(
+        ([url, init]) =>
+          typeof url === "string" &&
+          url.endsWith("/channels/idem-channel/messages") &&
+          (init as RequestInit | undefined)?.method === "POST",
+      );
+
+    it("creates exactly one recruit and posts once, even when run twice", async () => {
+      const scheduleId = crypto.randomUUID();
+      await setupDueSchedule(scheduleId);
+
+      const mockFetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: "posted-msg-id" }),
+          text: () => Promise.resolve(""),
+        } as Response),
+      );
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      await handleScheduled(env);
+      await handleScheduled(env);
+
+      const created = await db
+        .select()
+        .from(schema.recruits)
+        .where(eq(schema.recruits.scheduleId, scheduleId))
+        .all();
+
+      expect(created).toHaveLength(1);
+      // 投稿成功後に messageId が更新されている
+      expect(created[0].messageId).toBe("posted-msg-id");
+      // 二重投稿していない
+      expect(postMessageCalls(mockFetch)).toHaveLength(1);
+    });
+
+    it("rolls back the reserved row when the Discord post fails (no orphan)", async () => {
+      const scheduleId = crypto.randomUUID();
+      await setupDueSchedule(scheduleId);
+
+      // messages への POST だけ失敗させる
+      const mockFetch = vi.fn((url: unknown, init?: RequestInit) => {
+        if (
+          typeof url === "string" &&
+          url.endsWith("/channels/idem-channel/messages") &&
+          init?.method === "POST"
+        ) {
+          return Promise.resolve({
+            ok: false,
+            status: 500,
+            text: () => Promise.resolve("Internal Server Error"),
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: "x" }),
+          text: () => Promise.resolve(""),
+        } as Response);
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+
+      await handleScheduled(env);
+
+      const created = await db
+        .select()
+        .from(schema.recruits)
+        .where(eq(schema.recruits.scheduleId, scheduleId))
+        .all();
+
+      // 予約行は削除され、孤児（messageId 空のまま）が残らない
+      expect(created).toHaveLength(0);
     });
   });
 });

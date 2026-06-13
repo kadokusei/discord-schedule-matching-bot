@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `schedule_id_target_date_local_unique` ON `recruits` (`schedule_id`,`target_date_local`);
