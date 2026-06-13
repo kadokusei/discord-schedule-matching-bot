@@ -12,6 +12,8 @@ database_id = "local"
 
 [env.staging]
 vars = { ENVIRONMENT = "staging" }
+workers_dev = true
+preview_urls = false
 
 [env.staging.triggers]
 crons = ["*/5 * * * *"]
@@ -23,6 +25,8 @@ database_id = "f8834b9c-4077-4a50-9379-e13bbaf85858"
 
 [env.production]
 vars = { ENVIRONMENT = "production" }
+workers_dev = true
+preview_urls = false
 
 [env.production.triggers]
 crons = ["*/5 * * * *"]
