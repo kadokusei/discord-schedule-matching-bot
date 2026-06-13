@@ -5,6 +5,8 @@ interface TestEnv extends Env {
   TEST_MIGRATIONS: D1Migration[];
 }
 
-declare module "cloudflare:test" {
-  interface ProvidedEnv extends TestEnv {}
+declare global {
+  namespace Cloudflare {
+    interface Env extends TestEnv {}
+  }
 }
