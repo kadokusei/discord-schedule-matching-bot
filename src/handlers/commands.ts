@@ -64,7 +64,7 @@ export const handleCommandInteraction = async (
   const sub = getSubcommand(data);
 
   if (data.name === "schedule") {
-    if (sub?.name === "recruit") return handleScheduleRecruit(interaction, sub.options, env);
+    if (sub?.name === "create") return handleScheduleCreate(interaction, sub.options, env);
     if (sub?.name === "settings") return handleScheduleSettings(interaction, sub.options, env);
     if (sub?.name === "list") return handleScheduleList(interaction, env);
     if (sub?.name === "delete") return handleScheduleDelete(interaction, sub.options, env);
@@ -116,7 +116,7 @@ export const handleAutocomplete = async (
   };
 };
 
-const handleScheduleRecruit = async (
+const handleScheduleCreate = async (
   interaction: APIApplicationCommandInteraction,
   options: APIApplicationCommandInteractionDataOption[],
   env: Env,

@@ -54,12 +54,12 @@ describe("Command Handlers - Integration Tests", () => {
     vi.clearAllMocks();
   });
 
-  describe("/schedule recruit", () => {
+  describe("/schedule create", () => {
     it("should create schedule with provided options", async () => {
       await dispatch(
         buildCommandInteraction(
           "schedule",
-          "recruit",
+          "create",
           [
             { name: "post_time", value: "20:00" },
             { name: "interval", value: 60, type: 4 },
@@ -86,7 +86,7 @@ describe("Command Handlers - Integration Tests", () => {
       });
 
       await dispatch(
-        buildCommandInteraction("schedule", "recruit", [{ name: "post_time", value: "21:00" }], {
+        buildCommandInteraction("schedule", "create", [{ name: "post_time", value: "21:00" }], {
           guildId: "test-guild",
           channelId: "test-channel",
           userId: "test-user",
@@ -100,7 +100,7 @@ describe("Command Handlers - Integration Tests", () => {
 
     it("should return error for invalid time format", async () => {
       const response = await dispatch(
-        buildCommandInteraction("schedule", "recruit", [{ name: "post_time", value: "invalid" }], {
+        buildCommandInteraction("schedule", "create", [{ name: "post_time", value: "invalid" }], {
           guildId: "test-guild",
           channelId: "test-channel",
           userId: "test-user",

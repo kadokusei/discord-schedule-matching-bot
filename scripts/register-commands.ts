@@ -12,7 +12,7 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     options: [
       {
         type: ApplicationCommandOptionType.Subcommand,
-        name: "recruit",
+        name: "create",
         description: "募集スケジュールを作成します",
         options: [
           {
