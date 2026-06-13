@@ -6,7 +6,8 @@ export interface Match {
 export interface Diff {
   type: "created" | "updated" | "cancelled" | "unchanged";
   memberDiff: { removed: string[]; added: string[] } | null;
-  timeDiff: { prev: string; next: string } | null;
+  /** 変更前後の集合時刻（UTC ISO8601）。表示時にギルド tz へ変換する。 */
+  timeDiff: { prevUtc: string; nextUtc: string } | null;
 }
 
 export function diffMatch(prev: Match | null, next: Match | null): Diff {
@@ -52,31 +53,36 @@ function computeMemberDiff(
 function computeTimeDiff(
   prevTime: string,
   nextTime: string,
-): { prev: string; next: string } | null {
+): { prevUtc: string; nextUtc: string } | null {
   if (prevTime === nextTime) {
     return null;
   }
 
-  const prevLabel = utcToHHmm(prevTime);
-  const nextLabel = utcToHHmm(nextTime);
-
-  return { prev: prevLabel, next: nextLabel };
+  return { prevUtc: prevTime, nextUtc: nextTime };
 }
 
-function utcToHHmm(utc: string): string {
-  const date = new Date(utc);
-  return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+/** UTC ISO8601 を指定タイムゾーンの "HH:mm"（24時間表記）に変換する。 */
+export function utcToLocalHHmm(utc: string, tz: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(utc));
 }
+
+const mention = (id: string): string => `<@${id}>`;
 
 export function formatNotification(
   diff: Diff,
   match: Match | null,
   tz: string,
 ): string {
+  const fmt = (utc: string): string => utcToLocalHHmm(utc, tz);
+
   if (diff.type === "created" && match) {
-    const members = match.memberIds.map((id) => `@${id}`).join(" ");
-    const time = utcToHHmm(match.meetTimeUtc);
-    return `【確定】${members} 集合 ${time}`;
+    const members = match.memberIds.map(mention).join(" ");
+    return `【確定】${members} 集合 ${fmt(match.meetTimeUtc)}`;
   }
 
   if (diff.type === "cancelled") {
@@ -84,41 +90,21 @@ export function formatNotification(
   }
 
   if (diff.type === "updated") {
-    const memberPart = diff.memberDiff
-      ? `メンバー変更: (前) ${diff.memberDiff.removed.map((id) => `@${id}`).join(" ")} → (今) ${diff.memberDiff.added.map((id) => `@${id}`).join(" ")}`
-      : "";
+    const parts: string[] = [];
 
-    const timePart = diff.timeDiff
-      ? diff.memberDiff
-        ? `集合 ${diff.timeDiff.prev}→${diff.timeDiff.next}`
-        : `集合時刻: ${diff.timeDiff.prev} → ${diff.timeDiff.next}`
-      : "";
+    if (diff.memberDiff) {
+      const removed = diff.memberDiff.removed.map(mention).join(" ");
+      const added = diff.memberDiff.added.map(mention).join(" ");
+      parts.push(`メンバー変更: (前) ${removed} → (今) ${added}`);
+    }
 
-    const both = memberPart && timePart ? " / " : "";
-    const suffix =
-      diff.memberDiff && !diff.timeDiff
-        ? ` 集合 ${utcToHHmm(match?.meetTimeUtc ?? "")}`
-        : "";
-    const memberSuffix = diff.memberDiff ? "/ " : "";
-    const bothSuffix =
-      diff.memberDiff && diff.timeDiff
-        ? ` 集合 ${diff.timeDiff.prev}→${diff.timeDiff.next}`
-        : "";
+    if (diff.timeDiff) {
+      parts.push(`集合時刻: ${fmt(diff.timeDiff.prevUtc)} → ${fmt(diff.timeDiff.nextUtc)}`);
+    } else if (match) {
+      parts.push(`集合 ${fmt(match.meetTimeUtc)}`);
+    }
 
-    const finalSuffix =
-      diff.memberDiff && diff.timeDiff
-        ? bothSuffix
-        : diff.memberDiff
-          ? suffix.startsWith(" ")
-            ? memberSuffix + suffix.slice(1)
-            : memberSuffix + suffix
-          : `/ 集合 ${suffix}`;
-
-    return `【更新】${memberPart}${both}${timePart}${diff.timeDiff && !diff.memberDiff ? "（メンバーは同じ）" : ""}${finalSuffix}`;
-  }
-
-  if (diff.type === "unchanged") {
-    return "";
+    return `【更新】${parts.join(" / ")}`;
   }
 
   return "";

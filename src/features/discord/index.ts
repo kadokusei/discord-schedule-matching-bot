@@ -6,4 +6,7 @@ export {
   deleteDiscordMessage,
   updateDiscordMessage,
   postRecruitMessage,
+  buildRecruitComponents,
+  editOriginalInteractionResponse,
 } from "./client";
+export type { AllowedMentions, UpdateRecruitMessageParams } from "./client";

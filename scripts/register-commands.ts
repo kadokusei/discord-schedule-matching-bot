@@ -1,41 +1,136 @@
-import { Command, Option, register } from "discord-hono";
+import {
+  ApplicationCommandOptionType,
+  ApplicationCommandType,
+  type RESTPostAPIApplicationCommandsJSONBody,
+} from "discord-api-types/v10";
 
-const scheduleRecruitCommand = new Command("recruit", "募集スケジュールを作成します").options(
-  new Option("post_time", "投稿時間 (HH:MM形式)", 3).required(),
-  new Option("interval", "間隔（分）", 4),
-  new Option("duration", "募集期間（分）", 4),
-);
+const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
+  {
+    name: "schedule",
+    description: "スケジュール管理",
+    type: ApplicationCommandType.ChatInput,
+    options: [
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "recruit",
+        description: "募集スケジュールを作成します",
+        options: [
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "post_time",
+            description: "投稿時間 (HH:MM形式)",
+            required: true,
+          },
+          {
+            type: ApplicationCommandOptionType.Integer,
+            name: "interval",
+            description: "間隔（分）",
+          },
+          {
+            type: ApplicationCommandOptionType.Integer,
+            name: "duration",
+            description: "募集期間（分）",
+          },
+        ],
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "settings",
+        description: "サーバー設定を変更します",
+        options: [
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "timezone",
+            description: "タイムゾーン (例: Asia/Tokyo)",
+            required: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: "riot",
+    description: "VALORANTアカウント管理",
+    type: ApplicationCommandType.ChatInput,
+    options: [
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "add",
+        description: "VALORANTアカウントを追加します",
+        options: [
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "game_name",
+            description: "ゲーム名（#タグを含めることも可）",
+            required: true,
+          },
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "tag_line",
+            description: "タグライン（game_nameに#がない場合必須）",
+          },
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "region",
+            description: "リージョン (ap/na/eu/kr/latam/br)",
+          },
+        ],
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "remove",
+        description: "VALORANTアカウントを削除します",
+        options: [
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "game_name",
+            description: "ゲーム名",
+          },
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "tag_line",
+            description: "タグライン",
+          },
+        ],
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "list",
+        description: "登録済みのVALORANTアカウントを一覧表示します",
+      },
+    ],
+  },
+];
 
-const scheduleSettingsCommand = new Command("settings", "サーバー設定を変更します").options(
-  new Option("timezone", "タイムゾーン (例: Asia/Tokyo)", 3).required(),
-);
+const applicationId = process.env.DISCORD_APPLICATION_ID;
+const botToken = process.env.DISCORD_BOT_TOKEN;
+const testGuildId = process.env.DISCORD_TEST_GUILD_ID;
 
-const riotAccountAddCommand = new Command("add", "VALORANTアカウントを追加します").options(
-  new Option("game_name", "ゲーム名（#タグを含めることも可）", 3).required(),
-  new Option("tag_line", "タグライン（game_nameに#がない場合必須）", 3),
-  new Option("region", "リージョン (ap/na/eu/kr/latam/br)", 3),
-);
+if (!applicationId || !botToken) {
+  console.error("DISCORD_APPLICATION_ID と DISCORD_BOT_TOKEN を環境変数に設定してください");
+  process.exit(1);
+}
 
-const riotAccountRemoveCommand = new Command("remove", "VALORANTアカウントを削除します").options(
-  new Option("game_name", "ゲーム名", 3),
-  new Option("tag_line", "タグライン", 3),
-);
+// DISCORD_TEST_GUILD_ID があればギルド登録（即時反映）、無ければグローバル登録（最大1時間）
+const url = testGuildId
+  ? `https://discord.com/api/v10/applications/${applicationId}/guilds/${testGuildId}/commands`
+  : `https://discord.com/api/v10/applications/${applicationId}/commands`;
 
-const riotAccountListCommand = new Command("list", "登録済みのVALORANTアカウントを一覧表示します");
+const response = await fetch(url, {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bot ${botToken}`,
+  },
+  body: JSON.stringify(commands),
+});
 
-const scheduleCommand = new Command("schedule", "スケジュール管理")
-  .options(scheduleRecruitCommand)
-  .options(scheduleSettingsCommand);
+if (!response.ok) {
+  const text = await response.text();
+  console.error(`コマンド登録に失敗しました: ${response.status} ${text}`);
+  process.exit(1);
+}
 
-const riotCommand = new Command("riot", "VALORANTアカウント管理")
-  .options(riotAccountAddCommand)
-  .options(riotAccountRemoveCommand)
-  .options(riotAccountListCommand);
-
-const commands = [scheduleCommand, riotCommand];
-
-await register(
-  commands,
-  process.env.DISCORD_APPLICATION_ID ?? "",
-  process.env.DISCORD_BOT_TOKEN ?? "",
+console.log(
+  `コマンドを登録しました (${testGuildId ? `guild ${testGuildId}` : "global"}): ${commands.length} 件`,
 );

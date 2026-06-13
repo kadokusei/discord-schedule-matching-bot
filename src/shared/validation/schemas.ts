@@ -33,7 +33,7 @@ export const riotAccountAddOptionsSchema = z
       .string()
       .min(1, { error: "エラー: tag_lineは必須です" })
       .optional(),
-    region: regionSchema.default("na"),
+    region: regionSchema.default("ap"),
   })
   .refine(
     (data) => data.game_name.includes("#") || data.tag_line !== undefined,

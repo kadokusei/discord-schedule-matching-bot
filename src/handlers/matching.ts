@@ -1,20 +1,13 @@
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import { guildSettings, recruitEntries, recruits, riotAccounts, schedules } from "../db/schema";
 import {
-  guildSettings,
-  recruitEntries,
-  recruits,
-  riotAccounts,
-  schedules,
-} from "../db/schema";
-import { postChannelMessage, updateDiscordMessage } from "../features/discord";
+  type UpdateRecruitMessageParams,
+  postChannelMessage,
+  updateDiscordMessage,
+} from "../features/discord";
 import { type Entry, computeBestParty } from "../features/matching";
-import {
-  type Match,
-  diffMatch,
-  formatNotification,
-  matchSignature,
-} from "../features/recruit";
+import { type Match, diffMatch, formatNotification, matchSignature } from "../features/recruit";
 import type { Env } from "../lib/types";
 
 type DiscordUpdateResult = { success: true } | { success: false; error: Error };
@@ -23,18 +16,7 @@ const attemptDiscordUpdate = async (
   env: Env,
   channelId: string,
   messageId: string | null,
-  params: {
-    targetDateLocal: string;
-    postTimeHHmm: string;
-    status: "open" | "matched" | "cancelled" | "deleted";
-    confirmedCount: number;
-    pendingCount: number;
-    confirmedUsers?: { userId: string; availableFromUtc: string }[];
-    pendingUserIds?: string[];
-    matchedMembers?: string[];
-    matchedTime?: string;
-    timezone?: string;
-  },
+  params: UpdateRecruitMessageParams,
 ): Promise<DiscordUpdateResult> => {
   if (!messageId) {
     return {
@@ -54,11 +36,8 @@ const attemptDiscordUpdate = async (
   }
 };
 
-export async function recomputeMatch(
-  c: { env: Env },
-  recruitId: string,
-): Promise<void> {
-  const db = drizzle(c.env.DB);
+export async function recomputeMatch(env: Env, recruitId: string): Promise<void> {
+  const db = drizzle(env.DB);
 
   const entries = await db
     .select()
@@ -66,11 +45,7 @@ export async function recomputeMatch(
     .where(eq(recruitEntries.recruitId, recruitId))
     .all();
 
-  const recruit = await db
-    .select()
-    .from(recruits)
-    .where(eq(recruits.id, recruitId))
-    .get();
+  const recruit = await db.select().from(recruits).where(eq(recruits.id, recruitId)).get();
 
   if (!recruit) {
     return;
@@ -95,12 +70,8 @@ export async function recomputeMatch(
   const timezone = settings?.timezone ?? "Asia/Tokyo";
 
   // 参加状況を計算
-  const confirmedCount = entries.filter(
-    (entry) => entry.state === "confirmed",
-  ).length;
-  const pendingCount = entries.filter(
-    (entry) => entry.state === "pending_time",
-  ).length;
+  const confirmedCount = entries.filter((entry) => entry.state === "confirmed").length;
+  const pendingCount = entries.filter((entry) => entry.state === "pending_time").length;
 
   const confirmedUsers = entries
     .filter(
@@ -147,21 +118,16 @@ export async function recomputeMatch(
 
   if (confirmedEntries.length < 5) {
     // Discord更新を先に試みる
-    const discordResult = await attemptDiscordUpdate(
-      c.env,
-      recruit.channelId,
-      recruit.messageId,
-      {
-        targetDateLocal: recruit.targetDateLocal,
-        postTimeHHmm,
-        status: "open",
-        confirmedCount,
-        pendingCount,
-        confirmedUsers,
-        pendingUserIds,
-        timezone,
-      },
-    );
+    const discordResult = await attemptDiscordUpdate(env, recruit.channelId, recruit.messageId, {
+      targetDateLocal: recruit.targetDateLocal,
+      postTimeHHmm,
+      status: "open",
+      confirmedCount,
+      pendingCount,
+      confirmedUsers,
+      pendingUserIds,
+      timezone,
+    });
 
     if (!discordResult.success) {
       console.error(
@@ -183,7 +149,7 @@ export async function recomputeMatch(
       })
       .where(eq(recruits.id, recruitId));
 
-    await notifyMatchUpdate(c.env, recruit, previousMatch, null);
+    await notifyMatchUpdate(env, recruit, previousMatch, null, timezone);
     return;
   }
 
@@ -191,27 +157,22 @@ export async function recomputeMatch(
   const signature = matchSignature(bestParty);
 
   // Discord更新を先に試みる
-  const discordResult = await attemptDiscordUpdate(
-    c.env,
-    recruit.channelId,
-    recruit.messageId,
-    {
-      targetDateLocal: recruit.targetDateLocal,
-      postTimeHHmm,
-      status: "matched",
-      confirmedCount,
-      pendingCount,
-      confirmedUsers,
-      pendingUserIds,
-      matchedMembers: bestParty.memberIds,
-      matchedTime: new Date(bestParty.meetTimeUtc).toLocaleTimeString("ja-JP", {
-        timeZone: timezone,
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      timezone,
-    },
-  );
+  const discordResult = await attemptDiscordUpdate(env, recruit.channelId, recruit.messageId, {
+    targetDateLocal: recruit.targetDateLocal,
+    postTimeHHmm,
+    status: "matched",
+    confirmedCount,
+    pendingCount,
+    confirmedUsers,
+    pendingUserIds,
+    matchedMembers: bestParty.memberIds,
+    matchedTime: new Date(bestParty.meetTimeUtc).toLocaleTimeString("ja-JP", {
+      timeZone: timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    timezone,
+  });
 
   if (!discordResult.success) {
     console.error(
@@ -233,10 +194,16 @@ export async function recomputeMatch(
     })
     .where(eq(recruits.id, recruitId));
 
-  await notifyMatchUpdate(c.env, recruit, previousMatch, {
-    memberIds: bestParty.memberIds,
-    meetTimeUtc: bestParty.meetTimeUtc,
-  });
+  await notifyMatchUpdate(
+    env,
+    recruit,
+    previousMatch,
+    {
+      memberIds: bestParty.memberIds,
+      meetTimeUtc: bestParty.meetTimeUtc,
+    },
+    timezone,
+  );
 }
 
 type RecruitMatchSource = {
@@ -245,9 +212,7 @@ type RecruitMatchSource = {
   [key: string]: unknown;
 };
 
-export function buildMatchFromRecruit(
-  recruit: RecruitMatchSource,
-): Match | null {
+export function buildMatchFromRecruit(recruit: RecruitMatchSource): Match | null {
   if (!recruit.matchedMeetTimeUtc || !recruit.matchedMemberIdsJson) {
     return null;
   }
@@ -271,6 +236,7 @@ async function notifyMatchUpdate(
   recruit: typeof recruits.$inferSelect,
   prev: Match | null,
   next: Match | null,
+  timezone: string,
 ): Promise<void> {
   const diff = diffMatch(prev, next);
 
@@ -278,7 +244,7 @@ async function notifyMatchUpdate(
     return;
   }
 
-  const message = formatNotification(diff, next, "UTC");
+  const message = formatNotification(diff, next, timezone);
 
   if (!message) {
     return;
@@ -295,7 +261,13 @@ async function notifyMatchUpdate(
     return;
   }
 
-  await postChannelMessage(env, recruit.channelId, message);
+  // 確定/更新通知は対象メンバーのみ ping する（取消は ping しない）
+  await postChannelMessage(
+    env,
+    recruit.channelId,
+    message,
+    next ? { users: next.memberIds } : { parse: [] },
+  );
 
   const db = drizzle(env.DB);
 

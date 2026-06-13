@@ -48,8 +48,9 @@ export function shouldCreateInstance(
     localMidnightUtc.getTime() + hours * 3600000 + minutes * 60000,
   );
 
-  // 過去の時刻の場合は作成しない（時刻が等しい場合は作成する）
-  if (postTimeDate.getTime() < nowUtc.getTime()) {
+  // 投稿時刻前は作成しない（時刻が等しい場合は作成する）。
+  // post_time は「募集を投稿する時刻」であり、now >= post_time の最初の tick で当日分を作る。
+  if (nowUtc.getTime() < postTimeDate.getTime()) {
     return false;
   }
 

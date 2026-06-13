@@ -1,77 +1,101 @@
-import type { ComponentContext } from "discord-hono";
+import type {
+  APIInteractionResponse,
+  APIInteractionResponseCallbackData,
+  APIMessageComponentInteraction,
+} from "discord-api-types/v10";
+import { ComponentType, InteractionResponseType, MessageFlags } from "discord-api-types/v10";
 import { and, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
+import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
-import { deleteDiscordMessage } from "../features/discord";
+import { deleteDiscordMessage, editOriginalInteractionResponse } from "../features/discord";
 import { fetchValorantRankWithCache } from "../features/riot";
-import type { Env } from "../lib/types";
+import { buildTimeOptions } from "../shared/time";
+import type { Env, WaitUntilContext } from "../lib/types";
+import { recomputeMatch } from "./matching";
 
-const hasValues = (data: unknown): data is { values: string[] } => {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "values" in data &&
-    Array.isArray((data as { values: unknown }).values)
-  );
-};
+const getUserId = (interaction: APIMessageComponentInteraction): string =>
+  interaction.member?.user?.id ?? interaction.user?.id ?? "";
 
-type RankUpdateResult =
-  | { success: true; accountCount: number; failedCount: number }
-  | { success: false; error: string };
-
-const updateAllUserRanks = async (
-  userId: string,
-  db: DrizzleD1Database<typeof schema>,
-  apiKey: string,
-): Promise<RankUpdateResult> => {
-  const userAccounts = await db
-    .select()
-    .from(schema.riotAccounts)
-    .where(eq(schema.riotAccounts.userId, userId))
-    .all();
-
-  if (userAccounts.length === 0) {
-    return { success: true, accountCount: 0, failedCount: 0 };
+const getSelectedValue = (interaction: APIMessageComponentInteraction): string | undefined => {
+  const data = interaction.data;
+  if (data.component_type === ComponentType.StringSelect && data.values.length > 0) {
+    return data.values[0];
   }
-
-  const results = await Promise.allSettled(
-    userAccounts.map((account) =>
-      fetchValorantRankWithCache(
-        account.gameName,
-        account.tagLine,
-        userId,
-        db,
-        apiKey,
-        { isJoining: true },
-      ),
-    ),
-  );
-
-  const succeeded = results.filter(
-    (r) => r.status === "fulfilled" && r.value.success,
-  ).length;
-  const failed = results.length - succeeded;
-
-  return {
-    success: true,
-    accountCount: userAccounts.length,
-    failedCount: failed,
-  };
+  return undefined;
 };
 
-export const handlerRecruitJoin = async (
-  c: ComponentContext<{ Bindings: Env }>,
-) => {
-  const customId = c.interaction.data.custom_id;
-  const [, , recruitId] = customId.split(":");
-  const userId = c.interaction.member?.user?.id ?? c.interaction.user?.id ?? "";
+/** ephemeral deferred 応答（押したユーザー本人にだけ loading を見せる） */
+const deferredEphemeral = (): APIInteractionResponse => ({
+  type: InteractionResponseType.DeferredChannelMessageWithSource,
+  data: { flags: MessageFlags.Ephemeral },
+});
+
+/** @original を編集して結果を本人に反映。失敗時はログのみ。 */
+const respond = async (
+  env: Env,
+  interaction: APIMessageComponentInteraction,
+  body: APIInteractionResponseCallbackData,
+): Promise<void> => {
+  try {
+    await editOriginalInteractionResponse(env.DISCORD_APPLICATION_ID, interaction.token, body);
+  } catch (error) {
+    console.error("[COMPONENT] Failed to edit original response:", error);
+  }
+};
+
+/** MESSAGE_COMPONENT のディスパッチ。常に ephemeral deferred を即返し、本処理は waitUntil。 */
+export const handleComponentInteraction = (
+  interaction: APIMessageComponentInteraction,
+  env: Env,
+  ctx: WaitUntilContext,
+): APIInteractionResponse => {
+  const [, action, recruitId] = interaction.data.custom_id.split(":");
+
+  ctx.waitUntil(
+    (async () => {
+      try {
+        switch (action) {
+          case "join":
+            await handleRecruitJoin(interaction, recruitId, env);
+            break;
+          case "time":
+            await handleRecruitTime(interaction, recruitId, env);
+            break;
+          case "cancel":
+            await handleRecruitCancel(interaction, recruitId, env);
+            break;
+          case "delete":
+            await handleRecruitDelete(interaction, recruitId, env);
+            break;
+          default:
+            await respond(env, interaction, { content: "エラー: 不明な操作です" });
+        }
+      } catch (error) {
+        console.error(`[COMPONENT] Unhandled error for action ${action}:`, error);
+        await respond(env, interaction, {
+          content: "エラー: 処理中に問題が発生しました",
+        });
+      }
+    })(),
+  );
+
+  return deferredEphemeral();
+};
+
+const handleRecruitJoin = async (
+  interaction: APIMessageComponentInteraction,
+  recruitId: string,
+  env: Env,
+): Promise<void> => {
+  const userId = getUserId(interaction);
 
   if (!recruitId || !userId) {
-    return c.res("エラー: 必要な情報が不足しています");
+    await respond(env, interaction, { content: "エラー: 必要な情報が不足しています" });
+    return;
   }
 
-  const db = drizzle(c.env.DB, { schema });
+  const db = drizzle(env.DB, { schema });
   const nowUtc = new Date().toISOString();
 
   const recruit = await db
@@ -81,7 +105,8 @@ export const handlerRecruitJoin = async (
     .get();
 
   if (!recruit) {
-    return c.res("エラー: 募集が見つかりません");
+    await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
+    return;
   }
 
   const schedule = await db
@@ -96,13 +121,10 @@ export const handlerRecruitJoin = async (
     .where(eq(schema.guildSettings.guildId, recruit.guildId))
     .get();
 
-  const intervalMin =
-    schedule?.intervalMin ?? settings?.defaultIntervalMin ?? 30;
-  const durationMin =
-    schedule?.durationMin ?? settings?.defaultDurationMin ?? 360;
+  const intervalMin = schedule?.intervalMin ?? settings?.defaultIntervalMin ?? 30;
+  const durationMin = schedule?.durationMin ?? settings?.defaultDurationMin ?? 360;
   const timezone = settings?.timezone ?? "Asia/Tokyo";
 
-  const { buildTimeOptions } = await import("../shared/time");
   const timeOptions = buildTimeOptions(
     recruit.targetDateLocal,
     schedule?.postTimeHHmm ?? "20:00",
@@ -130,39 +152,21 @@ export const handlerRecruitJoin = async (
       },
     });
 
-  await (async () => {
-    const { recomputeMatch } = await import("./matching");
-    await recomputeMatch(c, recruitId);
-  })();
+  // 公開募集メッセージの Embed を更新（参加状況の反映は recomputeMatch に一本化）
+  await recomputeMatch(env, recruitId);
 
-  (async () => {
-    const result = await updateAllUserRanks(
-      userId,
-      db,
-      c.env.HENRIKDEV_API_KEY,
-    );
-
-    if (result.success && result.failedCount > 0) {
-      console.warn(
-        `[RANK_UPDATE] ${result.failedCount}/${result.accountCount} accounts failed to update for user ${userId}`,
-      );
-    }
-  })();
-
-  return c.update().res({
+  // 本人にだけ時間選択セレクトを ephemeral で提示
+  await respond(env, interaction, {
     content: "参加登録しました。希望時間を選んでください。",
     components: [
       {
-        type: 1,
+        type: ComponentType.ActionRow,
         components: [
           {
-            type: 3,
+            type: ComponentType.StringSelect,
             custom_id: `recruit:time:${recruitId}`,
             placeholder: "希望時間を選択",
-            options: timeOptions.map((opt) => ({
-              label: opt.label,
-              value: opt.value,
-            })),
+            options: timeOptions.map((opt) => ({ label: opt.label, value: opt.value })),
             min_values: 1,
             max_values: 1,
           },
@@ -170,23 +174,25 @@ export const handlerRecruitJoin = async (
       },
     ],
   });
+
+  // ランク再取得はベストエフォート（失敗してもマッチングは継続）
+  await updateAllUserRanks(userId, db, env.HENRIKDEV_API_KEY);
 };
 
-export const handlerRecruitTime = async (
-  c: ComponentContext<{ Bindings: Env }>,
-) => {
-  const customId = c.interaction.data.custom_id;
-  const [, , recruitId] = customId.split(":");
-  const userId = c.interaction.member?.user?.id ?? c.interaction.user?.id ?? "";
-  const selectedTime = hasValues(c.interaction.data)
-    ? c.interaction.data.values[0]
-    : undefined;
+const handleRecruitTime = async (
+  interaction: APIMessageComponentInteraction,
+  recruitId: string,
+  env: Env,
+): Promise<void> => {
+  const userId = getUserId(interaction);
+  const selectedTime = getSelectedValue(interaction);
 
   if (!recruitId || !userId || !selectedTime) {
-    return c.res("エラー: 必要な情報が不足しています");
+    await respond(env, interaction, { content: "エラー: 必要な情報が不足しています" });
+    return;
   }
 
-  const db = drizzle(c.env.DB, { schema });
+  const db = drizzle(env.DB, { schema });
   const nowUtc = new Date().toISOString();
 
   const recruit = await db
@@ -222,29 +228,28 @@ export const handlerRecruitTime = async (
       },
     });
 
-  await (async () => {
-    const { recomputeMatch } = await import("./matching");
-    await recomputeMatch(c, recruitId);
-  })();
+  await recomputeMatch(env, recruitId);
 
-  return c.update().res({
-    content: `希望時間を登録しました: ${new Date(selectedTime).toLocaleString("ja-JP", { timeZone: timezone })}`,
+  const localTime = new Date(selectedTime).toLocaleString("ja-JP", { timeZone: timezone });
+  await respond(env, interaction, {
+    content: `希望時間を登録しました: ${localTime}`,
     components: [],
   });
 };
 
-export const handlerRecruitCancel = async (
-  c: ComponentContext<{ Bindings: Env }>,
-) => {
-  const customId = c.interaction.data.custom_id;
-  const [, , recruitId] = customId.split(":");
-  const userId = c.interaction.member?.user?.id ?? c.interaction.user?.id ?? "";
+const handleRecruitCancel = async (
+  interaction: APIMessageComponentInteraction,
+  recruitId: string,
+  env: Env,
+): Promise<void> => {
+  const userId = getUserId(interaction);
 
   if (!recruitId || !userId) {
-    return c.res("エラー: 必要な情報が不足しています");
+    await respond(env, interaction, { content: "エラー: 必要な情報が不足しています" });
+    return;
   }
 
-  const db = drizzle(c.env.DB, { schema });
+  const db = drizzle(env.DB, { schema });
 
   await db
     .delete(schema.recruitEntries)
@@ -255,26 +260,24 @@ export const handlerRecruitCancel = async (
       ),
     );
 
-  await (async () => {
-    const { recomputeMatch } = await import("./matching");
-    await recomputeMatch(c, recruitId);
-  })();
+  await recomputeMatch(env, recruitId);
 
-  return c.res("参加を取り消しました。");
+  await respond(env, interaction, { content: "参加を取り消しました。", components: [] });
 };
 
-export const handlerRecruitDelete = async (
-  c: ComponentContext<{ Bindings: Env }>,
-) => {
-  const customId = c.interaction.data.custom_id;
-  const [, , recruitId] = customId.split(":");
-  const userId = c.interaction.member?.user?.id ?? c.interaction.user?.id ?? "";
+const handleRecruitDelete = async (
+  interaction: APIMessageComponentInteraction,
+  recruitId: string,
+  env: Env,
+): Promise<void> => {
+  const userId = getUserId(interaction);
 
   if (!recruitId || !userId) {
-    return c.res("エラー: 必要な情報が不足しています");
+    await respond(env, interaction, { content: "エラー: 必要な情報が不足しています" });
+    return;
   }
 
-  const db = drizzle(c.env.DB, { schema });
+  const db = drizzle(env.DB, { schema });
   const nowUtc = new Date().toISOString();
 
   const recruit = await db
@@ -284,7 +287,8 @@ export const handlerRecruitDelete = async (
     .get();
 
   if (!recruit) {
-    return c.res("エラー: 募集が見つかりません");
+    await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
+    return;
   }
 
   // スケジュール作成者のみ削除可能
@@ -295,25 +299,61 @@ export const handlerRecruitDelete = async (
     .get();
 
   if (schedule && schedule.creatorId !== userId) {
-    return c.res("エラー: 募集の削除はスケジュール作成者のみ可能です");
+    await respond(env, interaction, {
+      content: "エラー: 募集の削除はスケジュール作成者のみ可能です",
+    });
+    return;
   }
 
   if (recruit.messageId) {
-    await deleteDiscordMessage(c.env, recruit.channelId, recruit.messageId);
+    await deleteDiscordMessage(env, recruit.channelId, recruit.messageId);
   }
 
   await db
     .update(schema.recruits)
-    .set({
-      deletedBy: userId,
-      deletedAtUtc: nowUtc,
-      status: "deleted",
-    })
+    .set({ deletedBy: userId, deletedAtUtc: nowUtc, status: "deleted" })
     .where(eq(schema.recruits.id, recruitId));
 
-  await db
-    .delete(schema.recruitEntries)
-    .where(eq(schema.recruitEntries.recruitId, recruitId));
+  await db.delete(schema.recruitEntries).where(eq(schema.recruitEntries.recruitId, recruitId));
 
-  return c.res("募集を削除しました。");
+  await respond(env, interaction, { content: "募集を削除しました。", components: [] });
+};
+
+type RankUpdateResult =
+  | { success: true; accountCount: number; failedCount: number }
+  | { success: false; error: string };
+
+const updateAllUserRanks = async (
+  userId: string,
+  db: DrizzleD1Database<typeof schema>,
+  apiKey: string,
+): Promise<RankUpdateResult> => {
+  const userAccounts = await db
+    .select()
+    .from(schema.riotAccounts)
+    .where(eq(schema.riotAccounts.userId, userId))
+    .all();
+
+  if (userAccounts.length === 0) {
+    return { success: true, accountCount: 0, failedCount: 0 };
+  }
+
+  const results = await Promise.allSettled(
+    userAccounts.map((account) =>
+      fetchValorantRankWithCache(account.gameName, account.tagLine, userId, db, apiKey, {
+        isJoining: true,
+      }),
+    ),
+  );
+
+  const succeeded = results.filter((r) => r.status === "fulfilled" && r.value.success).length;
+  const failed = results.length - succeeded;
+
+  if (failed > 0) {
+    console.warn(
+      `[RANK_UPDATE] ${failed}/${userAccounts.length} accounts failed to update for user ${userId}`,
+    );
+  }
+
+  return { success: true, accountCount: userAccounts.length, failedCount: failed };
 };

@@ -1,21 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import {
-  guildSettings,
-  recruitEntries,
-  recruits,
-  schedules,
-} from "../db/schema";
-import {
-  postChannelMessage,
-  postRecruitMessage,
-  updateDiscordMessage,
-} from "../features/discord";
+import { guildSettings, recruitEntries, recruits, schedules } from "../db/schema";
+import { postChannelMessage, postRecruitMessage, updateDiscordMessage } from "../features/discord";
 import {
   buildReminderMessage,
-  filterPendingReminders,
   isRecruitExpired,
   shouldCreateInstance,
+  shouldSendReminder,
 } from "../features/recruit";
 import type { Env } from "../lib/types";
 
@@ -24,9 +15,7 @@ export async function handleScheduled(env: Env): Promise<void> {
   const nowUtc = new Date();
 
   const settingsRows = await db.select().from(guildSettings).all();
-  const settingsByGuild = new Map(
-    settingsRows.map((row) => [row.guildId, row]),
-  );
+  const settingsByGuild = new Map(settingsRows.map((row) => [row.guildId, row]));
 
   const allSchedules = await db.select().from(schedules).all();
 
@@ -112,10 +101,7 @@ export async function handleScheduled(env: Env): Promise<void> {
 
     if (!expired) continue;
 
-    await db
-      .update(recruits)
-      .set({ status: "closed" })
-      .where(eq(recruits.id, recruit.id));
+    await db.update(recruits).set({ status: "closed" }).where(eq(recruits.id, recruit.id));
 
     // Embed を更新してクローズ状態を反映
     try {
@@ -151,76 +137,64 @@ export async function handleScheduled(env: Env): Promise<void> {
     .where(eq(recruitEntries.state, "pending_time"))
     .all();
 
-  if (pendingEntries.length > 0) {
-    // recruit 情報を取得
-    const recruitIds = pendingEntries.map((e) => e.recruitId);
-    const recruitsData = await db
-      .select()
-      .from(recruits)
-      .where(inArray(recruits.id, recruitIds))
-      .all();
+  if (pendingEntries.length === 0) {
+    return;
+  }
 
-    const recruitsByRecruitId = new Map(recruitsData.map((r) => [r.id, r]));
+  // 対象 recruit 情報を取得
+  const recruitIds = pendingEntries.map((e) => e.recruitId);
+  const recruitsData = await db
+    .select()
+    .from(recruits)
+    .where(inArray(recruits.id, recruitIds))
+    .all();
 
-    // 各ギルドの設定を取得
-    const guildIds = recruitsData.map((r) => r.guildId);
-    const guildSettingsData = await db
-      .select()
-      .from(guildSettings)
-      .where(inArray(guildSettings.guildId, guildIds))
-      .all();
+  const recruitsByRecruitId = new Map(recruitsData.map((r) => [r.id, r]));
 
-    const settingsByGuildId = new Map(
-      guildSettingsData.map((s) => [s.guildId, s]),
-    );
+  // 各 pending エントリについて、その募集が属するギルドの設定でリマインド判定する
+  for (const entry of pendingEntries) {
+    const recruit = recruitsByRecruitId.get(entry.recruitId);
+    if (!recruit) continue;
 
-    // リマインド対象をフィルタリング
-    const reminderTargets = filterPendingReminders(
-      pendingEntries.map((entry) => ({
+    const guildSetting = settingsByGuild.get(recruit.guildId);
+    const reminderIntervalMin = guildSetting?.reminderIntervalMin;
+
+    const shouldRemind = shouldSendReminder(
+      {
         userId: entry.userId,
         recruitId: entry.recruitId,
-        channelId: recruitsByRecruitId.get(entry.recruitId)?.channelId ?? "",
+        channelId: recruit.channelId,
         lastRemindedAtUtc: entry.lastRemindedAtUtc,
-      })),
-      settingsByGuildId.get(recruitsData[0]?.guildId ?? "")
-        ?.reminderIntervalMin,
+      },
+      reminderIntervalMin,
       nowUtc,
     );
 
-    // リマインドを送信
-    for (const target of reminderTargets) {
-      const recruit = recruitsByRecruitId.get(target.recruitId);
-      if (!recruit) continue;
+    if (!shouldRemind) continue;
 
-      const reminderMessage = buildReminderMessage(target.recruitId);
+    const reminderMessage = buildReminderMessage(entry.recruitId);
 
-      try {
-        // チャンネルメンションで通知
-        await postChannelMessage(
-          env,
-          target.channelId,
-          `<@${target.userId}> ${reminderMessage}`,
+    try {
+      // 対象ユーザーのみ ping
+      await postChannelMessage(env, recruit.channelId, `<@${entry.userId}> ${reminderMessage}`, {
+        users: [entry.userId],
+      });
+
+      // メッセージ送信成功後のみリマインド時刻を更新
+      await db
+        .update(recruitEntries)
+        .set({ lastRemindedAtUtc: nowUtc.toISOString() })
+        .where(
+          and(
+            eq(recruitEntries.recruitId, entry.recruitId),
+            eq(recruitEntries.userId, entry.userId),
+          ),
         );
-
-        // メッセージ送信成功後のみリマインド時刻を更新
-        await db
-          .update(recruitEntries)
-          .set({
-            lastRemindedAtUtc: nowUtc.toISOString(),
-          })
-          .where(
-            and(
-              eq(recruitEntries.recruitId, target.recruitId),
-              eq(recruitEntries.userId, target.userId),
-            ),
-          );
-      } catch (error) {
-        // リマインド送信失敗時はログに出力して、次のターゲットに進む
-        console.error(
-          `Failed to send reminder to user ${target.userId} in recruit ${target.recruitId}:`,
-          error,
-        );
-      }
+    } catch (error) {
+      console.error(
+        `Failed to send reminder to user ${entry.userId} in recruit ${entry.recruitId}:`,
+        error,
+      );
     }
   }
 }

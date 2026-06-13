@@ -1,5 +1,6 @@
 import {
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -43,17 +44,21 @@ export const recruits = sqliteTable("recruits", {
   deletedAtUtc: text("deleted_at_utc"),
 });
 
-export const recruitEntries = sqliteTable("recruit_entries", {
-  recruitId: text("recruit_id")
-    .notNull()
-    .references(() => recruits.id, { onDelete: "cascade" }),
-  userId: text("user_id").notNull(),
-  state: text("state").notNull().default("pending_time"),
-  availableFromUtc: text("available_from_utc"),
-  createdAtUtc: text("created_at_utc").notNull(),
-  updatedAtUtc: text("updated_at_utc").notNull(),
-  lastRemindedAtUtc: text("last_reminded_at_utc"),
-});
+export const recruitEntries = sqliteTable(
+  "recruit_entries",
+  {
+    recruitId: text("recruit_id")
+      .notNull()
+      .references(() => recruits.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    state: text("state").notNull().default("pending_time"),
+    availableFromUtc: text("available_from_utc"),
+    createdAtUtc: text("created_at_utc").notNull(),
+    updatedAtUtc: text("updated_at_utc").notNull(),
+    lastRemindedAtUtc: text("last_reminded_at_utc"),
+  },
+  (t) => [primaryKey({ columns: [t.recruitId, t.userId] })],
+);
 
 export const riotAccounts = sqliteTable(
   "riot_accounts",

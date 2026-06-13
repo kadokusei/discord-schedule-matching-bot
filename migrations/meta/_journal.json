@@ -29,6 +29,13 @@
       "when": 1768815536338,
       "tag": "0003_melted_oracle",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1781363265659,
+      "tag": "0004_numerous_green_goblin",
+      "breakpoints": true
     }
   ]
 }

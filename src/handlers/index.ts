@@ -1,2 +1,4 @@
-export * from "./commands.js";
-export * from "./components.js";
+export { handleCommandInteraction } from "./commands";
+export { handleComponentInteraction } from "./components";
+export { recomputeMatch, buildMatchFromRecruit } from "./matching";
+export { handleScheduled } from "./scheduled";

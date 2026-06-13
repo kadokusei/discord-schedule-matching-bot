@@ -3,7 +3,9 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { apiRateLimits } from "../../db/schema";
 import type * as schema from "../../db/schema";
 
-const HENRIKDEV_RATE_LIMIT = 30; // requests per minute
+// HenrikDev の上限は 30 req/min だが、D1 ベースのカウントは非アトミックで
+// 同時実行時に超過し得るため、安全マージンを取り 25 に下げる。
+const HENRIKDEV_RATE_LIMIT = 25; // requests per minute (safety margin under 30)
 const RATE_LIMIT_WINDOW_MIN = 1;
 
 interface RateLimitCheckResult {
