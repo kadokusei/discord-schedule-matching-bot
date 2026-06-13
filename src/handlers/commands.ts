@@ -1,4 +1,5 @@
 import type {
+  APIApplicationCommandAutocompleteInteraction,
   APIApplicationCommandInteraction,
   APIApplicationCommandInteractionDataOption,
   APIChatInputApplicationCommandInteractionData,
@@ -9,10 +10,10 @@ import {
   InteractionResponseType,
   MessageFlags,
 } from "discord-api-types/v10";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
-import { editOriginalInteractionResponse } from "../features/discord";
+import { deleteDiscordMessage, editOriginalInteractionResponse } from "../features/discord";
 import { fetchValorantRankWithCache, formatRankLabel } from "../features/riot";
 import type { Env, WaitUntilContext } from "../lib/types";
 import * as v from "../shared/validation";
@@ -65,6 +66,8 @@ export const handleCommandInteraction = async (
   if (data.name === "schedule") {
     if (sub?.name === "recruit") return handleScheduleRecruit(interaction, sub.options, env);
     if (sub?.name === "settings") return handleScheduleSettings(interaction, sub.options, env);
+    if (sub?.name === "list") return handleScheduleList(interaction, env);
+    if (sub?.name === "delete") return handleScheduleDelete(interaction, sub.options, env);
   }
 
   if (data.name === "riot") {
@@ -74,6 +77,43 @@ export const handleCommandInteraction = async (
   }
 
   return ephemeral("エラー: 不明なコマンドです");
+};
+
+/** APPLICATION_COMMAND_AUTOCOMPLETE のディスパッチ（/schedule delete の id 候補のみ提供） */
+export const handleAutocomplete = async (
+  interaction: APIApplicationCommandAutocompleteInteraction,
+  env: Env,
+): Promise<APIInteractionResponse> => {
+  const emptyResult: APIInteractionResponse = {
+    type: InteractionResponseType.ApplicationCommandAutocompleteResult,
+    data: { choices: [] },
+  };
+
+  const guildId = interaction.guild_id;
+  const data = interaction.data;
+  const sub = data.options?.find((o) => o.type === ApplicationCommandOptionType.Subcommand);
+
+  if (data.name !== "schedule" || sub?.name !== "delete" || !guildId) {
+    return emptyResult;
+  }
+
+  const db = drizzle(env.DB, { schema });
+  const rows = await db
+    .select()
+    .from(schema.schedules)
+    .where(eq(schema.schedules.guildId, guildId))
+    .all();
+
+  // Discord のオートコンプリート候補は最大25件
+  const choices = rows.slice(0, 25).map((s) => ({
+    name: describeSchedule(s),
+    value: s.id,
+  }));
+
+  return {
+    type: InteractionResponseType.ApplicationCommandAutocompleteResult,
+    data: { choices },
+  };
 };
 
 const handleScheduleRecruit = async (
@@ -158,6 +198,99 @@ const handleScheduleSettings = async (
     });
 
   return ephemeral(`タイムゾーンを ${timezone} に設定しました`);
+};
+
+/** 定期予定の説明文（一覧・オートコンプリート共通）。active=0 は停止中として明示。 */
+const describeSchedule = (s: schema.Schedule): string =>
+  `${s.postTimeHHmm} (間隔${s.intervalMin}分 / 期間${s.durationMin}分)${s.active ? "" : " [停止中]"}`;
+
+const handleScheduleList = async (
+  interaction: APIApplicationCommandInteraction,
+  env: Env,
+): Promise<APIInteractionResponse> => {
+  const guildId = interaction.guild_id;
+
+  if (!guildId) {
+    return ephemeral("エラー: guild情報が不足しています");
+  }
+
+  const db = drizzle(env.DB, { schema });
+  const rows = await db
+    .select()
+    .from(schema.schedules)
+    .where(eq(schema.schedules.guildId, guildId))
+    .all();
+
+  if (rows.length === 0) {
+    return ephemeral("登録されている定期予定はありません");
+  }
+
+  const lines = rows.map((s) => `- ${describeSchedule(s)} 作成者: <@${s.creatorId}>`);
+
+  return ephemeral(`登録されている定期予定 (${rows.length}件):\n${lines.join("\n")}`);
+};
+
+const handleScheduleDelete = async (
+  interaction: APIApplicationCommandInteraction,
+  options: APIApplicationCommandInteractionDataOption[],
+  env: Env,
+): Promise<APIInteractionResponse> => {
+  const guildId = interaction.guild_id;
+
+  if (!guildId) {
+    return ephemeral("エラー: guild情報が不足しています");
+  }
+
+  const parsed = v.scheduleDeleteOptionsSchema.safeParse(optionsToObject(options));
+  if (!parsed.success) {
+    return ephemeral(parsed.error.issues[0].message);
+  }
+
+  const { id } = parsed.data;
+  const db = drizzle(env.DB, { schema });
+
+  // guild 内の予定のみ対象（権限チェックは行わない＝サーバー内の誰でも削除可）
+  const schedule = await db
+    .select()
+    .from(schema.schedules)
+    .where(and(eq(schema.schedules.id, id), eq(schema.schedules.guildId, guildId)))
+    .get();
+
+  if (!schedule) {
+    return ephemeral("エラー: 指定された定期予定が見つかりません");
+  }
+
+  const relatedRecruits = await db
+    .select()
+    .from(schema.recruits)
+    .where(eq(schema.recruits.scheduleId, id))
+    .all();
+
+  // open な募集は Discord メッセージを削除（失敗してもDB削除は継続）
+  for (const recruit of relatedRecruits) {
+    if (recruit.status === "open" && recruit.messageId) {
+      try {
+        await deleteDiscordMessage(env, recruit.channelId, recruit.messageId);
+      } catch (error) {
+        console.error(
+          `[SCHEDULE_DELETE] Failed to delete message for recruit ${recruit.id}:`,
+          error,
+        );
+      }
+    }
+  }
+
+  // 参照整合性のため entries → recruits → schedule の順で物理削除
+  const recruitIds = relatedRecruits.map((r) => r.id);
+  if (recruitIds.length > 0) {
+    await db
+      .delete(schema.recruitEntries)
+      .where(inArray(schema.recruitEntries.recruitId, recruitIds));
+  }
+  await db.delete(schema.recruits).where(eq(schema.recruits.scheduleId, id));
+  await db.delete(schema.schedules).where(eq(schema.schedules.id, id));
+
+  return ephemeral(`定期予定を削除しました: ${schedule.postTimeHHmm}`);
 };
 
 const parseGameName = (name: string, defaultTag?: string) => {

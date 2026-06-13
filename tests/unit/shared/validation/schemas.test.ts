@@ -5,6 +5,7 @@ import {
   regionSchema,
   riotAccountAddOptionsSchema,
   riotAccountRemoveOptionsSchema,
+  scheduleDeleteOptionsSchema,
   settingsOptionsSchema,
   timezoneSchema,
 } from "../../../../src/shared/validation";
@@ -174,6 +175,23 @@ describe("validation", () => {
         post_time: "20:00",
         interval: "abc",
       });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("scheduleDeleteOptionsSchema", () => {
+    it("should accept a non-empty id", () => {
+      const result = scheduleDeleteOptionsSchema.parse({ id: "abc-123" });
+      expect(result.id).toBe("abc-123");
+    });
+
+    it("should reject an empty id", () => {
+      const result = scheduleDeleteOptionsSchema.safeParse({ id: "" });
+      expect(result.success).toBe(false);
+    });
+
+    it("should reject a missing id", () => {
+      const result = scheduleDeleteOptionsSchema.safeParse({});
       expect(result.success).toBe(false);
     });
   });

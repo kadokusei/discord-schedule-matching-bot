@@ -46,6 +46,25 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
           },
         ],
       },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "list",
+        description: "登録済みの定期予定を一覧表示します",
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "delete",
+        description: "定期予定を削除します",
+        options: [
+          {
+            type: ApplicationCommandOptionType.String,
+            name: "id",
+            description: "削除する定期予定",
+            required: true,
+            autocomplete: true,
+          },
+        ],
+      },
     ],
   },
   {

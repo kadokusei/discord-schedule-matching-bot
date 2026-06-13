@@ -1,4 +1,5 @@
 import type {
+  APIApplicationCommandAutocompleteInteraction,
   APIApplicationCommandInteraction,
   APIInteraction,
   APIMessageComponentInteraction,
@@ -6,7 +7,12 @@ import type {
 import { InteractionResponseType, InteractionType } from "discord-api-types/v10";
 import { verifyKey } from "discord-interactions";
 import { Hono } from "hono";
-import { handleCommandInteraction, handleComponentInteraction, handleScheduled } from "./handlers";
+import {
+  handleAutocomplete,
+  handleCommandInteraction,
+  handleComponentInteraction,
+  handleScheduled,
+} from "./handlers";
 import type { Env } from "./lib/types";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -52,6 +58,14 @@ app.post("/", async (c) => {
         interaction as APIMessageComponentInteraction,
         env,
         c.executionCtx,
+      );
+      return c.json(response);
+    }
+
+    case InteractionType.ApplicationCommandAutocomplete: {
+      const response = await handleAutocomplete(
+        interaction as APIApplicationCommandAutocompleteInteraction,
+        env,
       );
       return c.json(response);
     }

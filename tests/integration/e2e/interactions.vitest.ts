@@ -103,6 +103,52 @@ describe("E2E: interaction routing through app.fetch", () => {
     expect(body.data?.flags).toBe(64);
   });
 
+  it("routes /schedule delete autocomplete to schedule choices", async () => {
+    const scheduleId = "sched-ac-1";
+    await db.insert(schema.schedules).values({
+      id: scheduleId,
+      guildId: "guild-ac",
+      channelId: "ch",
+      creatorId: "u",
+      postTimeHHmm: "19:00",
+      intervalMin: 30,
+      durationMin: 360,
+      template: "",
+      active: 1,
+    });
+
+    const response = await post({
+      type: 4, // APPLICATION_COMMAND_AUTOCOMPLETE
+      id: "i",
+      application_id: "test-app-id",
+      token: "tok",
+      guild_id: "guild-ac",
+      data: {
+        id: "c",
+        name: "schedule",
+        type: 1,
+        options: [
+          {
+            type: 1,
+            name: "delete",
+            options: [{ type: 3, name: "id", value: "", focused: true }],
+          },
+        ],
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      type: number;
+      data?: { choices?: { name: string; value: string }[] };
+    };
+    // APPLICATION_COMMAND_AUTOCOMPLETE_RESULT
+    expect(body.type).toBe(8);
+    expect(body.data?.choices).toHaveLength(1);
+    expect(body.data?.choices?.[0]?.value).toBe(scheduleId);
+    expect(body.data?.choices?.[0]?.name).toContain("19:00");
+  });
+
   it("returns an error message for an unknown command", async () => {
     const response = await post(commandPayload("unknown", "nope", [], { userId: "u-1" }));
     const body = (await response.json()) as { type: number; data?: { content?: string } };

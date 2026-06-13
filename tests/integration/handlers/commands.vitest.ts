@@ -46,6 +46,8 @@ describe("Command Handlers - Integration Tests", () => {
   const db = drizzle(env.DB, { schema });
 
   beforeEach(async () => {
+    await db.delete(schema.recruitEntries);
+    await db.delete(schema.recruits);
     await db.delete(schema.schedules);
     await db.delete(schema.guildSettings);
     await db.delete(schema.riotAccounts);
@@ -151,6 +153,168 @@ describe("Command Handlers - Integration Tests", () => {
         .get();
 
       expect(settings?.timezone).toBe("UTC");
+    });
+  });
+
+  describe("/schedule list", () => {
+    const insertSchedule = (overrides: Partial<typeof schema.schedules.$inferInsert> = {}) =>
+      db.insert(schema.schedules).values({
+        id: crypto.randomUUID(),
+        guildId: "test-guild",
+        channelId: "test-channel",
+        creatorId: "test-user",
+        postTimeHHmm: "20:00",
+        intervalMin: 30,
+        durationMin: 360,
+        template: "",
+        active: 1,
+        ...overrides,
+      });
+
+    it("should report when there are no schedules", async () => {
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "list", [], { guildId: "test-guild" }),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain(
+        "登録されている定期予定はありません",
+      );
+    });
+
+    it("should list all schedules in the guild", async () => {
+      await insertSchedule({ postTimeHHmm: "20:00", intervalMin: 60, durationMin: 180 });
+      await insertSchedule({ postTimeHHmm: "21:30", active: 0 });
+
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "list", [], { guildId: "test-guild" }),
+      );
+
+      const content = (response as { data?: { content?: string } }).data?.content ?? "";
+      expect(content).toContain("20:00");
+      expect(content).toContain("21:30");
+      expect(content).toContain("60");
+      expect(content).toContain("180");
+      // 停止中の予定が区別表示されること
+      expect(content).toContain("停止中");
+    });
+
+    it("should not list schedules from other guilds", async () => {
+      await insertSchedule({ guildId: "other-guild", postTimeHHmm: "08:00" });
+
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "list", [], { guildId: "test-guild" }),
+      );
+
+      const content = (response as { data?: { content?: string } }).data?.content ?? "";
+      expect(content).toContain("登録されている定期予定はありません");
+      expect(content).not.toContain("08:00");
+    });
+  });
+
+  describe("/schedule delete", () => {
+    const insertSchedule = (
+      id: string,
+      overrides: Partial<typeof schema.schedules.$inferInsert> = {},
+    ) =>
+      db.insert(schema.schedules).values({
+        id,
+        guildId: "test-guild",
+        channelId: "test-channel",
+        creatorId: "owner-user",
+        postTimeHHmm: "20:00",
+        intervalMin: 30,
+        durationMin: 360,
+        template: "",
+        active: 1,
+        ...overrides,
+      });
+
+    it("should delete the schedule and its recruits/entries", async () => {
+      const fetchMock = vi.fn((_url: unknown, _init?: RequestInit) =>
+        Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("") } as Response),
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const scheduleId = "sched-1";
+      await insertSchedule(scheduleId);
+      await db.insert(schema.recruits).values({
+        id: "recruit-1",
+        scheduleId,
+        guildId: "test-guild",
+        channelId: "test-channel",
+        messageId: "msg-1",
+        targetDateLocal: "2026-06-15",
+        status: "open",
+      });
+      await db.insert(schema.recruitEntries).values({
+        recruitId: "recruit-1",
+        userId: "test-user",
+        state: "confirmed",
+        createdAtUtc: new Date().toISOString(),
+        updatedAtUtc: new Date().toISOString(),
+      });
+
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "delete", [{ name: "id", value: scheduleId }], {
+          guildId: "test-guild",
+          userId: "owner-user",
+        }),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("削除しました");
+
+      expect(await db.select().from(schema.schedules).all()).toHaveLength(0);
+      expect(await db.select().from(schema.recruits).all()).toHaveLength(0);
+      expect(await db.select().from(schema.recruitEntries).all()).toHaveLength(0);
+
+      // open な募集の Discord メッセージ削除（DELETE）が呼ばれること
+      const deleteCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE");
+      expect(deleteCalls.length).toBe(1);
+    });
+
+    it("should allow deletion by a non-creator (anyone can delete)", async () => {
+      globalThis.fetch = vi.fn(() =>
+        Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve("") } as Response),
+      );
+
+      const scheduleId = "sched-2";
+      await insertSchedule(scheduleId, { creatorId: "owner-user" });
+
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "delete", [{ name: "id", value: scheduleId }], {
+          guildId: "test-guild",
+          userId: "different-user",
+        }),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("削除しました");
+      expect(await db.select().from(schema.schedules).all()).toHaveLength(0);
+    });
+
+    it("should return error for non-existent schedule", async () => {
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "delete", [{ name: "id", value: "missing-id" }], {
+          guildId: "test-guild",
+          userId: "test-user",
+        }),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("エラー");
+    });
+
+    it("should not delete a schedule belonging to another guild", async () => {
+      const scheduleId = "sched-3";
+      await insertSchedule(scheduleId, { guildId: "other-guild" });
+
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "delete", [{ name: "id", value: scheduleId }], {
+          guildId: "test-guild",
+          userId: "test-user",
+        }),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("エラー");
+      expect(await db.select().from(schema.schedules).all()).toHaveLength(1);
     });
   });
 

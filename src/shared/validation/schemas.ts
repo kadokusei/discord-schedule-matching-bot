@@ -62,9 +62,16 @@ export const settingsOptionsSchema = z.object({
   timezone: timezoneSchema,
 });
 
+// --- スキーマ定義: 定期予定の削除コマンド ---
+
+export const scheduleDeleteOptionsSchema = z.object({
+  id: z.string().min(1, { error: "エラー: 削除する定期予定を指定してください" }),
+});
+
 // --- 型推論エクスポート ---
 
 export type RiotAccountAddOptions = z.infer<typeof riotAccountAddOptionsSchema>;
 export type RiotAccountRemoveOptions = z.infer<typeof riotAccountRemoveOptionsSchema>;
 export type RecruitOptions = z.infer<typeof recruitOptionsSchema>;
 export type SettingsOptions = z.infer<typeof settingsOptionsSchema>;
+export type ScheduleDeleteOptions = z.infer<typeof scheduleDeleteOptionsSchema>;
