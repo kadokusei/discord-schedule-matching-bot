@@ -352,19 +352,16 @@ describe("handleScheduled - Integration Tests", () => {
       const target = reminderTargets[0];
       const reminderMessage = buildReminderMessage(target.recruitId);
 
-      await fetch(
-        "https://discord.com/api/v10/channels/test-channel/messages",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-          },
-          body: JSON.stringify({
-            content: `<@${target.userId}> ${reminderMessage}`,
-          }),
+      await fetch("https://discord.com/api/v10/channels/test-channel/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
         },
-      );
+        body: JSON.stringify({
+          content: `<@${target.userId}> ${reminderMessage}`,
+        }),
+      });
 
       // Update DB only after successful send
       await db
@@ -465,19 +462,16 @@ describe("handleScheduled - Integration Tests", () => {
       const reminderMessage = buildReminderMessage(target.recruitId);
 
       try {
-        const response = await fetch(
-          "https://discord.com/api/v10/channels/test-channel/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-            },
-            body: JSON.stringify({
-              content: `<@${target.userId}> ${reminderMessage}`,
-            }),
+        const response = await fetch("https://discord.com/api/v10/channels/test-channel/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
           },
-        );
+          body: JSON.stringify({
+            content: `<@${target.userId}> ${reminderMessage}`,
+          }),
+        });
 
         if (!response.ok) {
           throw new Error(`Discord API error: ${response.status}`);

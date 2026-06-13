@@ -3,10 +3,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../../src/db/schema";
-import {
-  type ValorantRank,
-  fetchValorantRankWithCache,
-} from "../../../../src/features/riot";
+import { type ValorantRank, fetchValorantRankWithCache } from "../../../../src/features/riot";
 
 // Mock fetch for HenrikDev API
 const mockFetch = vi.fn();
@@ -54,13 +51,7 @@ describe("fetchValorantRankWithCache", () => {
         json: async () => mockHenrikResponse,
       } as Response);
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(true);
       expect(result.account?.rank).toEqual(mockRankData);
@@ -89,13 +80,7 @@ describe("fetchValorantRankWithCache", () => {
       });
 
       // Fetch without calling API
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(true);
       expect(result.account?.rank).toEqual(mockRankData);
@@ -105,9 +90,7 @@ describe("fetchValorantRankWithCache", () => {
 
     it("should fetch from API when cache is expired (24 hours)", async () => {
       // Create a cached entry that's 25 hours old
-      const expiredUtc = new Date(
-        Date.now() - 25 * 60 * 60 * 1000,
-      ).toISOString();
+      const expiredUtc = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
       await db.insert(schema.riotAccounts).values({
         id: crypto.randomUUID(),
         userId,
@@ -124,13 +107,7 @@ describe("fetchValorantRankWithCache", () => {
         json: async () => mockHenrikResponse,
       } as Response);
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(true);
       expect(result.fromCache).toBe(false);
@@ -157,14 +134,9 @@ describe("fetchValorantRankWithCache", () => {
       } as Response);
 
       // With isJoining: true, 6 minute old cache should be expired
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-        { isJoining: true },
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey, {
+        isJoining: true,
+      });
 
       expect(result.success).toBe(true);
       expect(result.fromCache).toBe(false);
@@ -185,14 +157,9 @@ describe("fetchValorantRankWithCache", () => {
         lastFetchedAtUtc: fourMinAgoUtc,
       });
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-        { isJoining: true },
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey, {
+        isJoining: true,
+      });
 
       expect(result.success).toBe(true);
       expect(result.fromCache).toBe(true);
@@ -216,9 +183,7 @@ describe("fetchValorantRankWithCache", () => {
       });
 
       // Mock API error (expired cache)
-      const expiredUtc = new Date(
-        Date.now() - 25 * 60 * 60 * 1000,
-      ).toISOString();
+      const expiredUtc = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
       await db
         .update(schema.riotAccounts)
         .set({ lastFetchedAtUtc: expiredUtc })
@@ -230,13 +195,7 @@ describe("fetchValorantRankWithCache", () => {
         text: async () => "Internal Server Error",
       } as Response);
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(true);
       expect(result.account?.rank).toEqual(mockRankData);
@@ -250,13 +209,7 @@ describe("fetchValorantRankWithCache", () => {
         text: async () => "Not Found",
       } as Response);
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(false);
       expect(result.account).toBeNull();
@@ -280,9 +233,7 @@ describe("fetchValorantRankWithCache", () => {
       });
 
       // Expire the cache
-      const expiredUtc = new Date(
-        Date.now() - 25 * 60 * 60 * 1000,
-      ).toISOString();
+      const expiredUtc = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
       await db
         .update(schema.riotAccounts)
         .set({ lastFetchedAtUtc: expiredUtc })
@@ -295,13 +246,7 @@ describe("fetchValorantRankWithCache", () => {
         await limiter.checkRateLimit();
       }
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(true);
       expect(result.account?.rank).toEqual(mockRankData);
@@ -316,13 +261,7 @@ describe("fetchValorantRankWithCache", () => {
         await limiter.checkRateLimit();
       }
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(false);
       expect(result.remainingRequests).toBe(0);
@@ -362,9 +301,7 @@ describe("fetchValorantRankWithCache", () => {
       });
 
       // Expire the cache
-      const expiredUtc = new Date(
-        Date.now() - 25 * 60 * 60 * 1000,
-      ).toISOString();
+      const expiredUtc = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
       await db
         .update(schema.riotAccounts)
         .set({ lastFetchedAtUtc: expiredUtc })
@@ -392,14 +329,9 @@ describe("fetchValorantRankWithCache", () => {
         json: async () => mockHenrikResponse,
       } as Response);
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-        { region: "na" },
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey, {
+        region: "na",
+      });
 
       expect(result.success).toBe(true);
       expect(result.fromCache).toBe(false);
@@ -436,9 +368,7 @@ describe("fetchValorantRankWithCache", () => {
 
     it("should use stored region when updating existing account", async () => {
       // Create a cached entry with region 'eu'
-      const expiredUtc = new Date(
-        Date.now() - 25 * 60 * 60 * 1000,
-      ).toISOString();
+      const expiredUtc = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
       await db.insert(schema.riotAccounts).values({
         id: crypto.randomUUID(),
         userId,
@@ -482,13 +412,7 @@ describe("fetchValorantRankWithCache", () => {
       });
 
       // Should not throw and return null for rank
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(true);
       expect(result.fromCache).toBe(true);
@@ -509,13 +433,7 @@ describe("fetchValorantRankWithCache", () => {
         lastFetchedAtUtc: nowUtc,
       });
 
-      const result = await fetchValorantRankWithCache(
-        gameName,
-        tagLine,
-        userId,
-        db,
-        apiKey,
-      );
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(true);
       expect(result.fromCache).toBe(true);

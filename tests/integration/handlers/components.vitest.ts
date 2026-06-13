@@ -31,17 +31,14 @@ describe("Component Interaction Handlers - Unit Tests", () => {
         result.dbUpdated = true;
 
         // Step 2: Update Discord message (this should fail)
-        const response = await fetch(
-          "https://discord.com/api/v10/channels/test/messages/123",
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Bot test-token",
-            },
-            body: JSON.stringify({ embeds: [] }),
+        const response = await fetch("https://discord.com/api/v10/channels/test/messages/123", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bot test-token",
           },
-        );
+          body: JSON.stringify({ embeds: [] }),
+        });
 
         if (!response.ok) {
           throw new Error(`Discord API error: ${response.status}`);
@@ -79,17 +76,14 @@ describe("Component Interaction Handlers - Unit Tests", () => {
       };
 
       try {
-        const response = await fetch(
-          "https://discord.com/api/v10/channels/test/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Bot test-token",
-            },
-            body: JSON.stringify({ content: "test" }),
+        const response = await fetch("https://discord.com/api/v10/channels/test/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bot test-token",
           },
-        );
+          body: JSON.stringify({ content: "test" }),
+        });
 
         if (!response.ok) {
           throw new Error(`Discord API error: ${response.status}`);

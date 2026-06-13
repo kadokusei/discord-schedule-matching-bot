@@ -26,7 +26,7 @@ export function shouldSendReminder(
   return elapsedMs >= intervalMs;
 }
 
-export function buildReminderMessage(recruitId: string): string {
+export function buildReminderMessage(_recruitId: string): string {
   return "希望時間の登録がまだです！\n参加ボタンを押した後、セレクトメニューから希望時間を選択してください。";
 }
 
@@ -35,7 +35,5 @@ export function filterPendingReminders(
   reminderIntervalMin: number | null | undefined,
   nowUtc: Date,
 ): ReminderEntry[] {
-  return entries.filter((entry) =>
-    shouldSendReminder(entry, reminderIntervalMin, nowUtc),
-  );
+  return entries.filter((entry) => shouldSendReminder(entry, reminderIntervalMin, nowUtc));
 }

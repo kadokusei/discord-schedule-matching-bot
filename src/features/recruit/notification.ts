@@ -73,11 +73,7 @@ export function utcToLocalHHmm(utc: string, tz: string): string {
 
 const mention = (id: string): string => `<@${id}>`;
 
-export function formatNotification(
-  diff: Diff,
-  match: Match | null,
-  tz: string,
-): string {
+export function formatNotification(diff: Diff, match: Match | null, tz: string): string {
   const fmt = (utc: string): string => utcToLocalHHmm(utc, tz);
 
   if (diff.type === "created" && match) {

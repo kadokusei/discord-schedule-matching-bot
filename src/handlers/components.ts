@@ -254,10 +254,7 @@ const handleRecruitCancel = async (
   await db
     .delete(schema.recruitEntries)
     .where(
-      and(
-        eq(schema.recruitEntries.recruitId, recruitId),
-        eq(schema.recruitEntries.userId, userId),
-      ),
+      and(eq(schema.recruitEntries.recruitId, recruitId), eq(schema.recruitEntries.userId, userId)),
     );
 
   await recomputeMatch(env, recruitId);

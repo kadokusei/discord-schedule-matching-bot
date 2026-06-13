@@ -3969,13 +3969,7 @@ export interface components {
       /** @example https://media.valorant-api.com/weaponskinlevels/a3dba920-44ee-d7c5-5227-99a80aee3bd9/displayicon.png */
       icon?: string | null;
       /** @enum {string} */
-      type?:
-        | "skin_level"
-        | "skin_chroma"
-        | "buddy"
-        | "spray"
-        | "player_card"
-        | "player_title";
+      type?: "skin_level" | "skin_chroma" | "buddy" | "spray" | "player_card" | "player_title";
       /** @example 4c926aa9-4f26-bc80-c486-9b888333373f */
       skin_id?: string;
       content_tier?: {

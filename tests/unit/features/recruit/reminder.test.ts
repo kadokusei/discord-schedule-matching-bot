@@ -259,17 +259,14 @@ describe("handleScheduled - reminder failure handling", () => {
 
     for (const target of targets) {
       try {
-        const response = await fetch(
-          "https://discord.com/api/v10/channels/test/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Bot test-token",
-            },
-            body: JSON.stringify({ content: `<@${target.userId}> reminder` }),
+        const response = await fetch("https://discord.com/api/v10/channels/test/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bot test-token",
           },
-        );
+          body: JSON.stringify({ content: `<@${target.userId}> reminder` }),
+        });
 
         if (!response.ok) {
           throw new Error(`Discord API error: ${response.status}`);
@@ -321,17 +318,14 @@ describe("handleScheduled - reminder failure handling", () => {
     for (const target of targets) {
       try {
         // Step 1: Send message
-        const response = await fetch(
-          "https://discord.com/api/v10/channels/test/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Bot test-token",
-            },
-            body: JSON.stringify({ content: `<@${target.userId}> reminder` }),
+        const response = await fetch("https://discord.com/api/v10/channels/test/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bot test-token",
           },
-        );
+          body: JSON.stringify({ content: `<@${target.userId}> reminder` }),
+        });
 
         if (!response.ok) {
           throw new Error(`Discord API error: ${response.status}`);
@@ -366,17 +360,14 @@ describe("handleScheduled - reminder failure handling", () => {
     const target = { userId: "user1", channelId: "ch1", recruitId: "recruit1" };
 
     try {
-      const response = await fetch(
-        "https://discord.com/api/v10/channels/test/messages",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bot test-token",
-          },
-          body: JSON.stringify({ content: `<@${target.userId}> reminder` }),
+      const response = await fetch("https://discord.com/api/v10/channels/test/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bot test-token",
         },
-      );
+        body: JSON.stringify({ content: `<@${target.userId}> reminder` }),
+      });
 
       if (!response.ok) {
         throw new Error(`Discord API error: ${response.status}`);

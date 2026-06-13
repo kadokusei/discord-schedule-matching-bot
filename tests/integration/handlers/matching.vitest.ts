@@ -79,24 +79,9 @@ describe("recomputeMatch - Integration Tests", () => {
     const { recruitId } = await setupBase();
 
     // 3 confirmed, 1 pending
-    await insertEntry(
-      recruitId,
-      "user1",
-      "confirmed",
-      "2026-01-18T11:00:00.000Z",
-    );
-    await insertEntry(
-      recruitId,
-      "user2",
-      "confirmed",
-      "2026-01-18T11:30:00.000Z",
-    );
-    await insertEntry(
-      recruitId,
-      "user3",
-      "confirmed",
-      "2026-01-18T12:00:00.000Z",
-    );
+    await insertEntry(recruitId, "user1", "confirmed", "2026-01-18T11:00:00.000Z");
+    await insertEntry(recruitId, "user2", "confirmed", "2026-01-18T11:30:00.000Z");
+    await insertEntry(recruitId, "user3", "confirmed", "2026-01-18T12:00:00.000Z");
     await insertEntry(recruitId, "user4", "pending_time", null);
 
     // Track fetch calls
@@ -163,9 +148,7 @@ describe("recomputeMatch - Integration Tests", () => {
     expect(recruit?.matchSignature).toBeTruthy();
     expect(recruit?.matchedMeetTimeUtc).toBe(baseTime);
 
-    const memberIds = JSON.parse(
-      recruit?.matchedMemberIdsJson ?? "[]",
-    ) as string[];
+    const memberIds = JSON.parse(recruit?.matchedMemberIdsJson ?? "[]") as string[];
     expect(memberIds).toHaveLength(5);
     expect(memberIds).toContain("user1");
     expect(memberIds).toContain("user5");
@@ -175,24 +158,9 @@ describe("recomputeMatch - Integration Tests", () => {
     const { recruitId } = await setupBase();
 
     // 3 confirmed
-    await insertEntry(
-      recruitId,
-      "user1",
-      "confirmed",
-      "2026-01-18T11:00:00.000Z",
-    );
-    await insertEntry(
-      recruitId,
-      "user2",
-      "confirmed",
-      "2026-01-18T11:30:00.000Z",
-    );
-    await insertEntry(
-      recruitId,
-      "user3",
-      "confirmed",
-      "2026-01-18T12:00:00.000Z",
-    );
+    await insertEntry(recruitId, "user1", "confirmed", "2026-01-18T11:00:00.000Z");
+    await insertEntry(recruitId, "user2", "confirmed", "2026-01-18T11:30:00.000Z");
+    await insertEntry(recruitId, "user3", "confirmed", "2026-01-18T12:00:00.000Z");
 
     // Mock Discord API failure
     const mockFetch = vi.fn(() =>

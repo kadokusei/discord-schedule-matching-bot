@@ -3,8 +3,7 @@ import { z } from "zod";
 // --- 基本スキーマ ---
 
 export const regionSchema = z.enum(["na", "eu", "ap", "kr", "latam", "br"], {
-  error:
-    "エラー: 無効なリージョンです。na, eu, ap, kr, latam, br のいずれかを指定してください",
+  error: "エラー: 無効なリージョンです。na, eu, ap, kr, latam, br のいずれかを指定してください",
 });
 
 export const timezoneSchema = z.string().refine(
@@ -29,18 +28,12 @@ export const positiveNumberSchema = z
 export const riotAccountAddOptionsSchema = z
   .object({
     game_name: z.string().min(1, { error: "エラー: game_nameは必須です" }),
-    tag_line: z
-      .string()
-      .min(1, { error: "エラー: tag_lineは必須です" })
-      .optional(),
+    tag_line: z.string().min(1, { error: "エラー: tag_lineは必須です" }).optional(),
     region: regionSchema.default("ap"),
   })
-  .refine(
-    (data) => data.game_name.includes("#") || data.tag_line !== undefined,
-    {
-      error: "エラー: game_nameに#が含まれない場合、tag_lineは必須です",
-    },
-  );
+  .refine((data) => data.game_name.includes("#") || data.tag_line !== undefined, {
+    error: "エラー: game_nameに#が含まれない場合、tag_lineは必須です",
+  });
 
 // --- スキーマ定義: Riotアカウント削除 ---
 
@@ -49,14 +42,9 @@ export const riotAccountRemoveOptionsSchema = z
     game_name: z.string().optional(),
     tag_line: z.string().optional(),
   })
-  .refine(
-    (data) =>
-      (data.game_name && data.tag_line) || (!data.game_name && !data.tag_line),
-    {
-      error:
-        "エラー: game_nameとtag_lineは両方指定するか、両方省略してください",
-    },
-  );
+  .refine((data) => (data.game_name && data.tag_line) || (!data.game_name && !data.tag_line), {
+    error: "エラー: game_nameとtag_lineは両方指定するか、両方省略してください",
+  });
 
 // --- スキーマ定義: 募集コマンド ---
 
@@ -77,8 +65,6 @@ export const settingsOptionsSchema = z.object({
 // --- 型推論エクスポート ---
 
 export type RiotAccountAddOptions = z.infer<typeof riotAccountAddOptionsSchema>;
-export type RiotAccountRemoveOptions = z.infer<
-  typeof riotAccountRemoveOptionsSchema
->;
+export type RiotAccountRemoveOptions = z.infer<typeof riotAccountRemoveOptionsSchema>;
 export type RecruitOptions = z.infer<typeof recruitOptionsSchema>;
 export type SettingsOptions = z.infer<typeof settingsOptionsSchema>;

@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildRecruitEmbed,
-  type RecruitEmbedParams,
-} from "../../../../src/features/discord/embed";
+import { buildRecruitEmbed, type RecruitEmbedParams } from "../../../../src/features/discord/embed";
 
 // Note: formatConfirmedUsers, formatPendingUsers, and getEmbedColor are private functions
 // These tests verify the behavior through buildRecruitEmbed instead
@@ -17,9 +14,7 @@ describe("formatConfirmedUsers (via buildRecruitEmbed)", () => {
       pendingCount: 0,
     };
     const result = buildRecruitEmbed(params);
-    const statusField = result.embeds[0].fields?.find(
-      (f) => f.name === "参加状況",
-    );
+    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
     expect(statusField?.value).toContain("確定: 0人");
     expect(statusField?.value).not.toContain("<@");
   });
@@ -38,9 +33,7 @@ describe("formatConfirmedUsers (via buildRecruitEmbed)", () => {
       timezone: "Asia/Tokyo",
     };
     const result = buildRecruitEmbed(params);
-    const statusField = result.embeds[0].fields?.find(
-      (f) => f.name === "参加状況",
-    );
+    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
     expect(statusField?.value).toContain("<@user1>");
     expect(statusField?.value).toContain("<@user2>");
   });
@@ -56,9 +49,7 @@ describe("formatPendingUsers (via buildRecruitEmbed)", () => {
       pendingCount: 0,
     };
     const result = buildRecruitEmbed(params);
-    const statusField = result.embeds[0].fields?.find(
-      (f) => f.name === "参加状況",
-    );
+    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
     expect(statusField?.value).toContain("回答待ち: 0人");
   });
 
@@ -72,9 +63,7 @@ describe("formatPendingUsers (via buildRecruitEmbed)", () => {
       pendingUserIds: ["user1", "user2"],
     };
     const result = buildRecruitEmbed(params);
-    const statusField = result.embeds[0].fields?.find(
-      (f) => f.name === "参加状況",
-    );
+    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
     expect(statusField?.value).toContain("<@user1> (時間回答待ち)");
     expect(statusField?.value).toContain("<@user2> (時間回答待ち)");
   });
@@ -196,9 +185,7 @@ describe("buildRecruitEmbed", () => {
       ],
     };
     const result = buildRecruitEmbed(params);
-    const statusField = result.embeds[0].fields?.find(
-      (f) => f.name === "参加状況",
-    );
+    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
     expect(statusField?.value).toContain("<@user1>");
     expect(statusField?.value).toContain("<@user2>");
   });
@@ -210,9 +197,7 @@ describe("buildRecruitEmbed", () => {
       pendingUserIds: ["user3", "user4"],
     };
     const result = buildRecruitEmbed(params);
-    const statusField = result.embeds[0].fields?.find(
-      (f) => f.name === "参加状況",
-    );
+    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
     expect(statusField?.value).toContain("<@user3>");
     expect(statusField?.value).toContain("<@user4>");
   });
@@ -225,9 +210,7 @@ describe("buildRecruitEmbed", () => {
       matchedTime: "21:00",
     };
     const result = buildRecruitEmbed(params);
-    const matchField = result.embeds[0].fields?.find(
-      (f) => f.name === "マッチング結果",
-    );
+    const matchField = result.embeds[0].fields?.find((f) => f.name === "マッチング結果");
     expect(matchField).toBeDefined();
     expect(matchField?.value).toContain("21:00");
     expect(matchField?.value).toContain("<@user1>");

@@ -94,9 +94,7 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
   };
 }
 
-function getEmbedColor(
-  status: "open" | "matched" | "cancelled" | "deleted",
-): number {
+function getEmbedColor(status: "open" | "matched" | "cancelled" | "deleted"): number {
   switch (status) {
     case "open":
       return 0x00ff00; // 緑

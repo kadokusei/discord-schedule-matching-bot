@@ -20,9 +20,7 @@ describe("Command Handlers - Integration Tests", () => {
 
   describe("handlerScheduleRecruit", () => {
     it("should create schedule with provided options", async () => {
-      const { handlerScheduleRecruit } = await import(
-        "../../../src/handlers/commands"
-      );
+      const { handlerScheduleRecruit } = await import("../../../src/handlers/commands");
 
       const mockContext: MockCommandContext = {
         interaction: {
@@ -46,9 +44,7 @@ describe("Command Handlers - Integration Tests", () => {
         res: vi.fn() as never,
       };
 
-      await handlerScheduleRecruit(
-        mockContext as CommandContext<{ Bindings: Env }>,
-      );
+      await handlerScheduleRecruit(mockContext as CommandContext<{ Bindings: Env }>);
 
       const schedules = await db.select().from(schema.schedules).all();
       expect(schedules).toHaveLength(1);
@@ -58,9 +54,7 @@ describe("Command Handlers - Integration Tests", () => {
     });
 
     it("should use default settings when options not provided", async () => {
-      const { handlerScheduleRecruit } = await import(
-        "../../../src/handlers/commands"
-      );
+      const { handlerScheduleRecruit } = await import("../../../src/handlers/commands");
 
       await db.insert(schema.guildSettings).values({
         id: crypto.randomUUID(),
@@ -88,9 +82,7 @@ describe("Command Handlers - Integration Tests", () => {
         res: vi.fn() as never,
       };
 
-      await handlerScheduleRecruit(
-        mockContext as CommandContext<{ Bindings: Env }>,
-      );
+      await handlerScheduleRecruit(mockContext as CommandContext<{ Bindings: Env }>);
 
       const schedules = await db.select().from(schema.schedules).all();
       expect(schedules[0]?.intervalMin).toBe(45);
@@ -98,9 +90,7 @@ describe("Command Handlers - Integration Tests", () => {
     });
 
     it("should return error for invalid time format", async () => {
-      const { handlerScheduleRecruit } = await import(
-        "../../../src/handlers/commands"
-      );
+      const { handlerScheduleRecruit } = await import("../../../src/handlers/commands");
 
       const mockContext: MockCommandContext = {
         interaction: {
@@ -120,21 +110,15 @@ describe("Command Handlers - Integration Tests", () => {
         res: vi.fn() as never,
       };
 
-      await handlerScheduleRecruit(
-        mockContext as CommandContext<{ Bindings: Env }>,
-      );
+      await handlerScheduleRecruit(mockContext as CommandContext<{ Bindings: Env }>);
 
-      expect(mockContext.res).toHaveBeenCalledWith(
-        expect.stringContaining("エラー"),
-      );
+      expect(mockContext.res).toHaveBeenCalledWith(expect.stringContaining("エラー"));
     });
   });
 
   describe("handlerScheduleSettings", () => {
     it("should update timezone for existing guild", async () => {
-      const { handlerScheduleSettings } = await import(
-        "../../../src/handlers/commands"
-      );
+      const { handlerScheduleSettings } = await import("../../../src/handlers/commands");
 
       const existingId = crypto.randomUUID();
       await db.insert(schema.guildSettings).values({
@@ -159,9 +143,7 @@ describe("Command Handlers - Integration Tests", () => {
         res: vi.fn() as never,
       };
 
-      await handlerScheduleSettings(
-        mockContext as CommandContext<{ Bindings: Env }>,
-      );
+      await handlerScheduleSettings(mockContext as CommandContext<{ Bindings: Env }>);
 
       const settings = await db
         .select()
@@ -174,9 +156,7 @@ describe("Command Handlers - Integration Tests", () => {
     });
 
     it("should create new settings for new guild", async () => {
-      const { handlerScheduleSettings } = await import(
-        "../../../src/handlers/commands"
-      );
+      const { handlerScheduleSettings } = await import("../../../src/handlers/commands");
 
       const mockContext: MockCommandContext = {
         interaction: {
@@ -194,9 +174,7 @@ describe("Command Handlers - Integration Tests", () => {
         res: vi.fn() as never,
       };
 
-      await handlerScheduleSettings(
-        mockContext as CommandContext<{ Bindings: Env }>,
-      );
+      await handlerScheduleSettings(mockContext as CommandContext<{ Bindings: Env }>);
 
       const settings = await db
         .select()
@@ -210,9 +188,7 @@ describe("Command Handlers - Integration Tests", () => {
 
   describe("handlerRiotAccountList", () => {
     it("should return empty message when no accounts", async () => {
-      const { handlerRiotAccountList } = await import(
-        "../../../src/handlers/commands"
-      );
+      const { handlerRiotAccountList } = await import("../../../src/handlers/commands");
 
       const mockContext: MockCommandContext = {
         interaction: {
@@ -227,19 +203,13 @@ describe("Command Handlers - Integration Tests", () => {
         res: vi.fn() as never,
       };
 
-      await handlerRiotAccountList(
-        mockContext as CommandContext<{ Bindings: Env }>,
-      );
+      await handlerRiotAccountList(mockContext as CommandContext<{ Bindings: Env }>);
 
-      expect(mockContext.res).toHaveBeenCalledWith(
-        "登録されているアカウントはありません",
-      );
+      expect(mockContext.res).toHaveBeenCalledWith("登録されているアカウントはありません");
     });
 
     it("should list all user accounts", async () => {
-      const { handlerRiotAccountList } = await import(
-        "../../../src/handlers/commands"
-      );
+      const { handlerRiotAccountList } = await import("../../../src/handlers/commands");
 
       const userId = "test-user";
       await db.insert(schema.riotAccounts).values([
@@ -278,22 +248,14 @@ describe("Command Handlers - Integration Tests", () => {
         res: vi.fn() as never,
       };
 
-      await handlerRiotAccountList(
-        mockContext as CommandContext<{ Bindings: Env }>,
-      );
+      await handlerRiotAccountList(mockContext as CommandContext<{ Bindings: Env }>);
 
-      expect(mockContext.res).toHaveBeenCalledWith(
-        expect.stringContaining("Player1#123"),
-      );
-      expect(mockContext.res).toHaveBeenCalledWith(
-        expect.stringContaining("Player2#456"),
-      );
+      expect(mockContext.res).toHaveBeenCalledWith(expect.stringContaining("Player1#123"));
+      expect(mockContext.res).toHaveBeenCalledWith(expect.stringContaining("Player2#456"));
     });
 
     it("should return only accounts for the requesting user", async () => {
-      const { handlerRiotAccountList } = await import(
-        "../../../src/handlers/commands"
-      );
+      const { handlerRiotAccountList } = await import("../../../src/handlers/commands");
 
       const user1 = "user1";
       const user2 = "user2";
@@ -334,16 +296,10 @@ describe("Command Handlers - Integration Tests", () => {
         res: vi.fn() as never,
       };
 
-      await handlerRiotAccountList(
-        mockContext as CommandContext<{ Bindings: Env }>,
-      );
+      await handlerRiotAccountList(mockContext as CommandContext<{ Bindings: Env }>);
 
-      expect(mockContext.res).toHaveBeenCalledWith(
-        expect.stringContaining("Player1#123"),
-      );
-      expect(mockContext.res).not.toHaveBeenCalledWith(
-        expect.stringContaining("Player2#456"),
-      );
+      expect(mockContext.res).toHaveBeenCalledWith(expect.stringContaining("Player1#123"));
+      expect(mockContext.res).not.toHaveBeenCalledWith(expect.stringContaining("Player2#456"));
     });
   });
 });

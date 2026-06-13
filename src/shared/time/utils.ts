@@ -3,18 +3,12 @@ export interface TimeOption {
   value: string;
 }
 
-export function localDateTimeToUtc(
-  dateLocal: string,
-  timeHHmm: string,
-  tz: string,
-): Date {
+export function localDateTimeToUtc(dateLocal: string, timeHHmm: string, tz: string): Date {
   const [year, month, day] = dateLocal.split("-").map(Number);
   const [hours, minutes] = timeHHmm.split(":").map(Number);
 
   // Create a date in UTC (treat local time as UTC first)
-  const utcDate = new Date(
-    Date.UTC(year, month - 1, day, hours, minutes, 0, 0),
-  );
+  const utcDate = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0));
 
   // Get the timezone offset using Intl
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -43,23 +37,20 @@ export function buildTimeOptions(
 ): TimeOption[] {
   const baseDate = localDateTimeToUtc(targetDateLocal, postTimeHHmm, tz);
 
-  const options = Array.from(
-    { length: durationMin / intervalMin + 1 },
-    (_, i) => {
-      const date = new Date(baseDate.getTime() + i * intervalMin * 60 * 1000);
+  const options = Array.from({ length: durationMin / intervalMin + 1 }, (_, i) => {
+    const date = new Date(baseDate.getTime() + i * intervalMin * 60 * 1000);
 
-      const formatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: tz,
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-      const label = formatter.format(date);
-      const value = date.toISOString();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const label = formatter.format(date);
+    const value = date.toISOString();
 
-      return { label, value };
-    },
-  );
+    return { label, value };
+  });
 
   return options;
 }

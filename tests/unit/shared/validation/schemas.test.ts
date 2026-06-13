@@ -182,9 +182,7 @@ describe("validation", () => {
     it("should accept valid positive integers", () => {
       expect(positiveNumberSchema.parse(1)).toBe(1);
       expect(positiveNumberSchema.parse(100)).toBe(100);
-      expect(positiveNumberSchema.parse(Number.MAX_SAFE_INTEGER)).toBe(
-        Number.MAX_SAFE_INTEGER,
-      );
+      expect(positiveNumberSchema.parse(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER);
     });
 
     it("should reject zero", () => {

@@ -49,15 +49,12 @@ function getRankLevel(rank: string): number {
 function calculateRankVariance(entries: Entry[]): number {
   if (entries.length === 0) return 0;
 
-  const ranks = entries
-    .map((e) => (e.rank ? getRankLevel(e.rank) : 0))
-    .filter((r) => r > 0);
+  const ranks = entries.map((e) => (e.rank ? getRankLevel(e.rank) : 0)).filter((r) => r > 0);
 
   if (ranks.length === 0) return 0;
 
   const mean = ranks.reduce((sum, r) => sum + r, 0) / ranks.length;
-  const variance =
-    ranks.reduce((sum, r) => sum + (r - mean) ** 2, 0) / ranks.length;
+  const variance = ranks.reduce((sum, r) => sum + (r - mean) ** 2, 0) / ranks.length;
 
   return variance;
 }
@@ -67,20 +64,14 @@ function combinations<T>(arr: T[], k: number): T[][] {
   if (arr.length === 0) return [];
 
   const [first, ...rest] = arr;
-  const combsWithFirst = combinations(rest, k - 1).map((comb) => [
-    first,
-    ...comb,
-  ]);
+  const combsWithFirst = combinations(rest, k - 1).map((comb) => [first, ...comb]);
   const combsWithoutFirst = combinations(rest, k);
 
   return [...combsWithFirst, ...combsWithoutFirst];
 }
 
 function sumCreatedAt(entries: Entry[]): number {
-  return entries.reduce(
-    (sum, e) => sum + new Date(e.createdAtUtc).getTime(),
-    0,
-  );
+  return entries.reduce((sum, e) => sum + new Date(e.createdAtUtc).getTime(), 0);
 }
 
 export function computeBestParty(entries: Entry[]): BestParty {
@@ -125,8 +116,7 @@ export function computeBestParty(entries: Entry[]): BestParty {
       // 回答時間が早いユーザー優先
       if (
         sumCreatedAtValue < bestSumCreatedAt ||
-        (sumCreatedAtValue === bestSumCreatedAt &&
-          rankVariance < bestRankVariance)
+        (sumCreatedAtValue === bestSumCreatedAt && rankVariance < bestRankVariance)
       ) {
         bestSumCreatedAt = sumCreatedAtValue;
         bestRankVariance = rankVariance;
@@ -158,9 +148,7 @@ export function selectOptimalAccounts(
   }
 
   // ランクが近いアカウント同士を選択するため、ランクでソート
-  const sortedAccounts = [...accounts].sort(
-    (a, b) => getRankLevel(a.rank) - getRankLevel(b.rank),
-  );
+  const sortedAccounts = [...accounts].sort((a, b) => getRankLevel(a.rank) - getRankLevel(b.rank));
 
   // 連続したランクのアカウントを選択（最小分散）
   let bestCombination: typeof sortedAccounts = [];

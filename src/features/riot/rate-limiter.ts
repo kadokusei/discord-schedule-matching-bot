@@ -40,13 +40,10 @@ const recordRequestWithLimitCheck = async (
 
   if (currentCount >= limit) {
     const oldestRequest = recentRequests.sort(
-      (a, b) =>
-        new Date(a.requestedAtUtc).getTime() -
-        new Date(b.requestedAtUtc).getTime(),
+      (a, b) => new Date(a.requestedAtUtc).getTime() - new Date(b.requestedAtUtc).getTime(),
     )[0];
 
-    const expireTime =
-      new Date(oldestRequest.requestedAtUtc).getTime() + windowMs;
+    const expireTime = new Date(oldestRequest.requestedAtUtc).getTime() + windowMs;
     const waitTimeMs = Math.max(0, expireTime - Date.now());
 
     return {

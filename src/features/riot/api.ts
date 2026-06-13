@@ -106,7 +106,7 @@ export async function fetchValorantRank(
   }
 }
 
-function tierToRank(tier: number, division: number): ValorantRank {
+function tierToRank(tier: number, _division: number): ValorantRank {
   const ranks = [
     "Unrated",
     "Iron",
@@ -161,8 +161,7 @@ export async function fetchValorantRankWithCache(
 ): Promise<FetchRankResult> {
   const isJoining = options?.isJoining ?? false;
   const cacheDurationMs =
-    options?.cacheDurationMs ??
-    (isJoining ? CACHE_DURATION_MS_JOINING : CACHE_DURATION_MS_NORMAL);
+    options?.cacheDurationMs ?? (isJoining ? CACHE_DURATION_MS_JOINING : CACHE_DURATION_MS_NORMAL);
   const explicitRegion = options?.region;
   const nowUtc = Date.now();
   const cacheExpiryUtc = nowUtc - cacheDurationMs;
@@ -182,9 +181,7 @@ export async function fetchValorantRankWithCache(
 
   // キャッシュの有効性チェック
   if (existingAccount) {
-    const lastFetchedTime = new Date(
-      existingAccount.lastFetchedAtUtc,
-    ).getTime();
+    const lastFetchedTime = new Date(existingAccount.lastFetchedAtUtc).getTime();
     if (lastFetchedTime > cacheExpiryUtc) {
       // キャッシュが有効
       const rank = parseRankSafely(existingAccount.rank);
@@ -259,9 +256,7 @@ export async function fetchValorantRankWithCache(
 
   // API成功時：アカウント情報を更新
   const currentUtc = new Date(nowUtc).toISOString();
-  const rankJson = apiResult.account.rank
-    ? JSON.stringify(apiResult.account.rank)
-    : "";
+  const rankJson = apiResult.account.rank ? JSON.stringify(apiResult.account.rank) : "";
 
   // アカウント情報をupsert
   await db

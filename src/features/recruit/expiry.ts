@@ -15,14 +15,8 @@ export const isRecruitExpired = (
   timezone: string,
   nowUtc: Date,
 ): boolean => {
-  const startUtc = localDateTimeToUtc(
-    recruit.targetDateLocal,
-    recruit.postTimeHHmm,
-    timezone,
-  );
-  const expiryUtc = new Date(
-    startUtc.getTime() + recruit.durationMin * 60 * 1000,
-  );
+  const startUtc = localDateTimeToUtc(recruit.targetDateLocal, recruit.postTimeHHmm, timezone);
+  const expiryUtc = new Date(startUtc.getTime() + recruit.durationMin * 60 * 1000);
 
   return nowUtc.getTime() >= expiryUtc.getTime();
 };

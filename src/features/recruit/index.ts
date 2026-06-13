@@ -1,11 +1,7 @@
 export { diffMatch, formatNotification, matchSignature } from "./notification";
 export type { Match, Diff } from "./notification";
 
-export {
-  shouldSendReminder,
-  buildReminderMessage,
-  filterPendingReminders,
-} from "./reminder";
+export { shouldSendReminder, buildReminderMessage, filterPendingReminders } from "./reminder";
 export type { ReminderEntry } from "./reminder";
 
 export { shouldCreateInstance } from "./scheduler";

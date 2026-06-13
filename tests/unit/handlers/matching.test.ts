@@ -113,9 +113,7 @@ describe("recomputeMatch - filtering logic", () => {
       { state: "confirmed", availableFromUtc: "2026-01-18T14:00:00.000Z" },
     ];
 
-    const confirmedEntries = entries.filter(
-      (e) => e.state === "confirmed" && e.availableFromUtc,
-    );
+    const confirmedEntries = entries.filter((e) => e.state === "confirmed" && e.availableFromUtc);
     expect(confirmedEntries).toHaveLength(2);
   });
 
@@ -170,9 +168,7 @@ describe("recomputeMatch - filtering logic", () => {
       { userId: "user3", state: "pending_time", availableFromUtc: null },
     ];
 
-    const pendingUserIds = entries
-      .filter((e) => e.state === "pending_time")
-      .map((e) => e.userId);
+    const pendingUserIds = entries.filter((e) => e.state === "pending_time").map((e) => e.userId);
 
     expect(pendingUserIds).toEqual(["user2", "user3"]);
   });

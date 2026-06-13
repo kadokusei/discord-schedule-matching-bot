@@ -76,11 +76,7 @@ export async function handleScheduled(env: Env): Promise<void> {
   }
 
   // 期限切れ募集のクローズ処理
-  const openRecruits = await db
-    .select()
-    .from(recruits)
-    .where(eq(recruits.status, "open"))
-    .all();
+  const openRecruits = await db.select().from(recruits).where(eq(recruits.status, "open")).all();
 
   for (const recruit of openRecruits) {
     const schedule = allSchedules.find((s) => s.id === recruit.scheduleId);
@@ -123,10 +119,7 @@ export async function handleScheduled(env: Env): Promise<void> {
         timezone: tz,
       });
     } catch (error) {
-      console.error(
-        `[EXPIRY] Failed to update Discord message for recruit ${recruit.id}:`,
-        error,
-      );
+      console.error(`[EXPIRY] Failed to update Discord message for recruit ${recruit.id}:`, error);
     }
   }
 

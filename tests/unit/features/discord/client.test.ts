@@ -77,9 +77,9 @@ describe("Discord API Client", () => {
 
       const mockEnv = buildEnv("test-token");
 
-      await expect(
-        postChannelMessage(mockEnv, "ch-123", "Test message"),
-      ).rejects.toThrow("Discord API error: 400 Bad Request");
+      await expect(postChannelMessage(mockEnv, "ch-123", "Test message")).rejects.toThrow(
+        "Discord API error: 400 Bad Request",
+      );
     });
 
     it("should throw error on 401 Unauthorized", async () => {
@@ -94,9 +94,9 @@ describe("Discord API Client", () => {
 
       const mockEnv = buildEnv("invalid-token");
 
-      await expect(
-        postChannelMessage(mockEnv, "ch-123", "Test message"),
-      ).rejects.toThrow("Discord API error: 401 Unauthorized");
+      await expect(postChannelMessage(mockEnv, "ch-123", "Test message")).rejects.toThrow(
+        "Discord API error: 401 Unauthorized",
+      );
     });
 
     it("should throw error on 429 Rate Limit", async () => {
@@ -111,9 +111,9 @@ describe("Discord API Client", () => {
 
       const mockEnv = buildEnv("test-token");
 
-      await expect(
-        postChannelMessage(mockEnv, "ch-123", "Test message"),
-      ).rejects.toThrow("Discord API error: 429 Rate Limited");
+      await expect(postChannelMessage(mockEnv, "ch-123", "Test message")).rejects.toThrow(
+        "Discord API error: 429 Rate Limited",
+      );
     });
 
     it("should throw error on 500 Internal Server Error", async () => {
@@ -128,9 +128,9 @@ describe("Discord API Client", () => {
 
       const mockEnv = buildEnv("test-token");
 
-      await expect(
-        postChannelMessage(mockEnv, "ch-123", "Test message"),
-      ).rejects.toThrow("Discord API error: 500 Internal Server Error");
+      await expect(postChannelMessage(mockEnv, "ch-123", "Test message")).rejects.toThrow(
+        "Discord API error: 500 Internal Server Error",
+      );
     });
   });
 
@@ -172,9 +172,9 @@ describe("Discord API Client", () => {
 
       const mockEnv = buildEnv("test-token");
 
-      await expect(
-        deleteDiscordMessage(mockEnv, "ch-123", "msg-456"),
-      ).rejects.toThrow("Discord API error: 404 Not Found");
+      await expect(deleteDiscordMessage(mockEnv, "ch-123", "msg-456")).rejects.toThrow(
+        "Discord API error: 404 Not Found",
+      );
     });
 
     it("should throw error on 403 Forbidden", async () => {
@@ -189,9 +189,9 @@ describe("Discord API Client", () => {
 
       const mockEnv = buildEnv("test-token");
 
-      await expect(
-        deleteDiscordMessage(mockEnv, "ch-123", "msg-456"),
-      ).rejects.toThrow("Discord API error: 403 Forbidden");
+      await expect(deleteDiscordMessage(mockEnv, "ch-123", "msg-456")).rejects.toThrow(
+        "Discord API error: 403 Forbidden",
+      );
     });
   });
 
@@ -330,15 +330,9 @@ describe("Discord API Client", () => {
       expect(callArgs.components).toBeDefined();
       expect(callArgs.components).toHaveLength(1);
       expect(callArgs.components[0].components).toHaveLength(3);
-      expect(callArgs.components[0].components[0].custom_id).toContain(
-        "recruit:join:",
-      );
-      expect(callArgs.components[0].components[1].custom_id).toContain(
-        "recruit:cancel:",
-      );
-      expect(callArgs.components[0].components[2].custom_id).toContain(
-        "recruit:delete:",
-      );
+      expect(callArgs.components[0].components[0].custom_id).toContain("recruit:join:");
+      expect(callArgs.components[0].components[1].custom_id).toContain("recruit:cancel:");
+      expect(callArgs.components[0].components[2].custom_id).toContain("recruit:delete:");
       // Delete button should be Danger style (4)
       expect(callArgs.components[0].components[2].style).toBe(4);
     });

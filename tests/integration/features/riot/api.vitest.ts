@@ -297,8 +297,7 @@ describe("fetchValorantRank", () => {
         Promise.resolve({
           ok: false,
           status: 408,
-          text: () =>
-            Promise.resolve(riotApiFixtures.errors.requestTimeout.body),
+          text: () => Promise.resolve(riotApiFixtures.errors.requestTimeout.body),
         } as Response),
       );
 
@@ -330,8 +329,7 @@ describe("fetchValorantRank", () => {
         Promise.resolve({
           ok: false,
           status: 503,
-          text: () =>
-            Promise.resolve(riotApiFixtures.errors.serviceUnavailable.body),
+          text: () => Promise.resolve(riotApiFixtures.errors.serviceUnavailable.body),
         } as Response),
       );
 
@@ -399,9 +397,7 @@ describe("fetchValorantRank", () => {
 
   describe("ネットワークエラーハンドリング", () => {
     it("should handle fetch timeout error", async () => {
-      globalThis.fetch = vi.fn(() =>
-        Promise.reject(new Error("Request timeout")),
-      );
+      globalThis.fetch = vi.fn(() => Promise.reject(new Error("Request timeout")));
 
       const result = await fetchValorantRank("name", "tag", "api-key");
 
@@ -411,9 +407,7 @@ describe("fetchValorantRank", () => {
     });
 
     it("should handle network error", async () => {
-      globalThis.fetch = vi.fn(() =>
-        Promise.reject(new Error("Network request failed")),
-      );
+      globalThis.fetch = vi.fn(() => Promise.reject(new Error("Network request failed")));
 
       const result = await fetchValorantRank("name", "tag", "api-key");
 

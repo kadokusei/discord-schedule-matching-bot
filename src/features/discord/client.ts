@@ -47,15 +47,12 @@ export async function deleteDiscordMessage(
   channelId: string,
   messageId: string,
 ): Promise<void> {
-  const response = await fetch(
-    `${DISCORD_API_BASE}/channels/${channelId}/messages/${messageId}`,
-    {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-      },
+  const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages/${messageId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
     },
-  );
+  });
 
   if (!response.ok) {
     const text = await response.text();
@@ -90,17 +87,14 @@ export async function updateDiscordMessage(
     allowed_mentions: NO_MENTIONS,
   };
 
-  const response = await fetch(
-    `${DISCORD_API_BASE}/channels/${channelId}/messages/${messageId}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-      },
-      body: JSON.stringify(payload),
+  const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages/${messageId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
     },
-  );
+    body: JSON.stringify(payload),
+  });
 
   if (!response.ok) {
     const text = await response.text();

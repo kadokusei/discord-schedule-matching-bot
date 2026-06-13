@@ -1,10 +1,4 @@
-import {
-  integer,
-  primaryKey,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const guildSettings = sqliteTable("guild_settings", {
   id: text("id").primaryKey(),
@@ -72,13 +66,7 @@ export const riotAccounts = sqliteTable(
     createdAtUtc: text("created_at_utc").notNull(),
     lastFetchedAtUtc: text("last_fetched_at_utc").notNull(),
   },
-  (t) => [
-    uniqueIndex("user_id_game_name_tag_line_unique").on(
-      t.userId,
-      t.gameName,
-      t.tagLine,
-    ),
-  ],
+  (t) => [uniqueIndex("user_id_game_name_tag_line_unique").on(t.userId, t.gameName, t.tagLine)],
 );
 
 export const apiRateLimits = sqliteTable("api_rate_limits", {
