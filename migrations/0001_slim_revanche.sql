@@ -1,0 +1,1 @@
+ALTER TABLE `recruit_entries` ADD `created_at_utc` text NOT NULL;

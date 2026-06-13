@@ -1,0 +1,278 @@
+import { env } from "cloudflare:test";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as schema from "../../../src/db/schema";
+import { recomputeMatch } from "../../../src/handlers/matching";
+
+describe("recomputeMatch - Integration Tests", () => {
+  const db = drizzle(env.DB, { schema });
+
+  const cleanup = async () => {
+    await db.delete(schema.recruitEntries);
+    await db.delete(schema.recruits);
+    await db.delete(schema.schedules);
+    await db.delete(schema.guildSettings);
+    await db.delete(schema.riotAccounts);
+  };
+
+  const setupBase = async () => {
+    await cleanup();
+
+    await db.insert(schema.guildSettings).values({
+      id: crypto.randomUUID(),
+      guildId: "test-guild",
+      timezone: "Asia/Tokyo",
+      defaultIntervalMin: 30,
+      defaultDurationMin: 360,
+      defaultTemplate: "",
+    });
+
+    const scheduleId = crypto.randomUUID();
+    await db.insert(schema.schedules).values({
+      id: scheduleId,
+      guildId: "test-guild",
+      channelId: "test-channel",
+      creatorId: "creator",
+      postTimeHHmm: "20:00",
+      intervalMin: 30,
+      durationMin: 360,
+      template: "",
+      active: 1,
+    });
+
+    const recruitId = crypto.randomUUID();
+    await db.insert(schema.recruits).values({
+      id: recruitId,
+      scheduleId,
+      guildId: "test-guild",
+      channelId: "test-channel",
+      messageId: "msg-123",
+      targetDateLocal: "2026-01-18",
+      status: "open",
+    });
+
+    return { scheduleId, recruitId };
+  };
+
+  const insertEntry = async (
+    recruitId: string,
+    userId: string,
+    state: string,
+    availableFromUtc: string | null,
+  ) => {
+    await db.insert(schema.recruitEntries).values({
+      recruitId,
+      userId,
+      state,
+      availableFromUtc,
+      createdAtUtc: "2026-01-18T10:00:00.000Z",
+      updatedAtUtc: "2026-01-18T10:00:00.000Z",
+    });
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("should keep status open when fewer than 5 confirmed entries", async () => {
+    const { recruitId } = await setupBase();
+
+    // 3 confirmed, 1 pending
+    await insertEntry(
+      recruitId,
+      "user1",
+      "confirmed",
+      "2026-01-18T11:00:00.000Z",
+    );
+    await insertEntry(
+      recruitId,
+      "user2",
+      "confirmed",
+      "2026-01-18T11:30:00.000Z",
+    );
+    await insertEntry(
+      recruitId,
+      "user3",
+      "confirmed",
+      "2026-01-18T12:00:00.000Z",
+    );
+    await insertEntry(recruitId, "user4", "pending_time", null);
+
+    // Track fetch calls
+    const calls: { url: string; method: string }[] = [];
+    const mockFetch = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), method: init?.method ?? "GET" });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(""),
+      } as Response);
+    });
+    globalThis.fetch = mockFetch as typeof globalThis.fetch;
+
+    await recomputeMatch({ env }, recruitId);
+
+    const recruit = await db
+      .select()
+      .from(schema.recruits)
+      .where(eq(schema.recruits.id, recruitId))
+      .get();
+
+    expect(recruit?.status).toBe("open");
+    expect(recruit?.matchSignature).toBeNull();
+    expect(recruit?.matchedMeetTimeUtc).toBeNull();
+    expect(recruit?.matchedMemberIdsJson).toBeNull();
+
+    // updateDiscordMessage should have been called once (PATCH)
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain("/channels/test-channel/messages/msg-123");
+    expect(calls[0].method).toBe("PATCH");
+  });
+
+  it("should set status matched when 5+ confirmed entries", async () => {
+    const { recruitId } = await setupBase();
+
+    // 5 confirmed entries with the same available time
+    const baseTime = "2026-01-18T11:00:00.000Z";
+    for (let i = 1; i <= 5; i++) {
+      await insertEntry(recruitId, `user${i}`, "confirmed", baseTime);
+    }
+
+    // Mock Discord API — PATCH (updateDiscordMessage) + POST (postChannelMessage notification)
+    const mockFetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(""),
+      } as Response),
+    );
+    globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+    await recomputeMatch({ env }, recruitId);
+
+    const recruit = await db
+      .select()
+      .from(schema.recruits)
+      .where(eq(schema.recruits.id, recruitId))
+      .get();
+
+    expect(recruit?.status).toBe("matched");
+    expect(recruit?.matchSignature).toBeTruthy();
+    expect(recruit?.matchedMeetTimeUtc).toBe(baseTime);
+
+    const memberIds = JSON.parse(
+      recruit?.matchedMemberIdsJson ?? "[]",
+    ) as string[];
+    expect(memberIds).toHaveLength(5);
+    expect(memberIds).toContain("user1");
+    expect(memberIds).toContain("user5");
+  });
+
+  it("should skip DB update when Discord API fails", async () => {
+    const { recruitId } = await setupBase();
+
+    // 3 confirmed
+    await insertEntry(
+      recruitId,
+      "user1",
+      "confirmed",
+      "2026-01-18T11:00:00.000Z",
+    );
+    await insertEntry(
+      recruitId,
+      "user2",
+      "confirmed",
+      "2026-01-18T11:30:00.000Z",
+    );
+    await insertEntry(
+      recruitId,
+      "user3",
+      "confirmed",
+      "2026-01-18T12:00:00.000Z",
+    );
+
+    // Mock Discord API failure
+    const mockFetch = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve("Internal Server Error"),
+      } as Response),
+    );
+    globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+    // Suppress expected console.error
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await recomputeMatch({ env }, recruitId);
+
+    // DB should remain unchanged (status stays "open", no match fields set)
+    const recruit = await db
+      .select()
+      .from(schema.recruits)
+      .where(eq(schema.recruits.id, recruitId))
+      .get();
+
+    expect(recruit?.status).toBe("open");
+    expect(recruit?.matchSignature).toBeNull();
+  });
+
+  it("should return early when recruit does not exist", async () => {
+    await cleanup();
+
+    const mockFetch = vi.fn();
+    globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+    // Should not throw
+    await recomputeMatch({ env }, "non-existent-id");
+
+    // No Discord API calls should be made
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("should send notification when match is formed", async () => {
+    const { recruitId } = await setupBase();
+
+    const baseTime = "2026-01-18T11:00:00.000Z";
+    for (let i = 1; i <= 5; i++) {
+      await insertEntry(recruitId, `user${i}`, "confirmed", baseTime);
+    }
+
+    const fetchCalls: { url: string; method: string; body?: string }[] = [];
+    const mockFetch = vi.fn((url: RequestInfo | URL, options?: RequestInit) => {
+      fetchCalls.push({
+        url: String(url),
+        method: options?.method ?? "GET",
+        body: options?.body?.toString(),
+      });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(""),
+      } as Response);
+    });
+    globalThis.fetch = mockFetch as typeof globalThis.fetch;
+
+    await recomputeMatch({ env }, recruitId);
+
+    // Should have called:
+    // 1. PATCH to update Discord embed (matched status)
+    // 2. POST to send notification message
+    // 3. (possibly another PATCH for lastNotifiedSignature update — done via DB)
+    const patchCalls = fetchCalls.filter((c) => c.method === "PATCH");
+    const postCalls = fetchCalls.filter((c) => c.method === "POST");
+
+    expect(patchCalls.length).toBeGreaterThanOrEqual(1);
+    expect(postCalls.length).toBeGreaterThanOrEqual(1);
+
+    // Verify notification was sent to the correct channel
+    const notificationCall = postCalls.find((c) =>
+      c.url.includes("/channels/test-channel/messages"),
+    );
+    expect(notificationCall).toBeTruthy();
+  });
+});
