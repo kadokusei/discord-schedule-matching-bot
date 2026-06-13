@@ -11,6 +11,7 @@ import {
   type Match,
   diffMatch,
   formatNotification,
+  isRecruitActive,
   matchSignature,
   mentionTargets,
 } from "../features/recruit";
@@ -58,6 +59,11 @@ export async function recomputeMatch(
   const recruit = await db.select().from(recruits).where(eq(recruits.id, recruitId)).get();
 
   if (!recruit) {
+    return;
+  }
+
+  // 終端状態(closed/cancelled/deleted)の募集は再計算で open/matched に戻さない（復活防止）
+  if (!isRecruitActive(recruit.status)) {
     return;
   }
 
@@ -259,6 +265,11 @@ export async function finalizeSmallParty(
 
   const recruit = await db.select().from(recruits).where(eq(recruits.id, recruitId)).get();
   if (!recruit || recruit.smallPartyStatus !== "proposed") {
+    return;
+  }
+
+  // 終端状態の募集は確定処理を行わない（復活防止）
+  if (!isRecruitActive(recruit.status)) {
     return;
   }
 

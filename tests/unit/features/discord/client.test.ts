@@ -260,6 +260,59 @@ describe("Discord API Client", () => {
       const callArgs = JSON.parse(getRequestBody(mockFetch));
       expect(callArgs.embeds).toBeDefined();
     });
+
+    it("should clear components when status is cancelled (terminal)", async () => {
+      const mockFetch = vi.fn(() => Promise.resolve({ ok: true, status: 200 } as Response));
+      globalThis.fetch = mockFetch;
+      const mockEnv = buildEnv("test-token");
+
+      await updateDiscordMessage(mockEnv, "ch-123", "msg-456", {
+        targetDateLocal: "2026-01-18",
+        postTimeHHmm: "20:00",
+        status: "cancelled",
+        confirmedCount: 0,
+        pendingCount: 0,
+      });
+
+      const callArgs = JSON.parse(getRequestBody(mockFetch));
+      // クローズ時はボタンを除去するため components: [] を含める
+      expect(callArgs.components).toEqual([]);
+    });
+
+    it("should clear components when status is deleted (terminal)", async () => {
+      const mockFetch = vi.fn(() => Promise.resolve({ ok: true, status: 200 } as Response));
+      globalThis.fetch = mockFetch;
+      const mockEnv = buildEnv("test-token");
+
+      await updateDiscordMessage(mockEnv, "ch-123", "msg-456", {
+        targetDateLocal: "2026-01-18",
+        postTimeHHmm: "20:00",
+        status: "deleted",
+        confirmedCount: 0,
+        pendingCount: 0,
+      });
+
+      const callArgs = JSON.parse(getRequestBody(mockFetch));
+      expect(callArgs.components).toEqual([]);
+    });
+
+    it("should NOT include components for active statuses (open/matched)", async () => {
+      const mockFetch = vi.fn(() => Promise.resolve({ ok: true, status: 200 } as Response));
+      globalThis.fetch = mockFetch;
+      const mockEnv = buildEnv("test-token");
+
+      await updateDiscordMessage(mockEnv, "ch-123", "msg-456", {
+        targetDateLocal: "2026-01-18",
+        postTimeHHmm: "20:00",
+        status: "open",
+        confirmedCount: 1,
+        pendingCount: 0,
+      });
+
+      const callArgs = JSON.parse(getRequestBody(mockFetch));
+      // open はまだ参加可能なのでボタンを残す（components キー自体を送らない）
+      expect(callArgs.components).toBeUndefined();
+    });
   });
 
   describe("postRecruitMessage", () => {

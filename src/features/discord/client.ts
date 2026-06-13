@@ -81,8 +81,14 @@ export async function updateDiscordMessage(
 ): Promise<void> {
   const embedData = buildRecruitEmbed(params);
 
+  // 終端状態（クローズ/削除）になった募集はボタンを残さない。
+  // components を空配列で送ることで、古い参加/キャンセル/時間選択ボタンを除去し、
+  // クローズ後にコンポーネント経由で募集が復活させられるのを防ぐ。
+  const isTerminal = params.status === "cancelled" || params.status === "deleted";
+
   const payload = {
     embeds: embedData.embeds,
+    ...(isTerminal ? { components: [] } : {}),
     // Embed 内の <@id> は ping しないが、明示しておく
     allowed_mentions: NO_MENTIONS,
   };

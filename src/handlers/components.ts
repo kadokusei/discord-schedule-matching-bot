@@ -9,7 +9,7 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import { editOriginalInteractionResponse } from "../features/discord";
-import { applyConsent } from "../features/recruit";
+import { applyConsent, isRecruitActive } from "../features/recruit";
 import { fetchValorantRankWithCache } from "../features/riot";
 import { buildTimeOptions } from "../shared/time";
 import type { Env, WaitUntilContext } from "../lib/types";
@@ -31,6 +31,9 @@ const deferredEphemeral = (): APIInteractionResponse => ({
   type: InteractionResponseType.DeferredChannelMessageWithSource,
   data: { flags: MessageFlags.Ephemeral },
 });
+
+/** 終端状態の募集に対する操作を弾くときの定型メッセージ。 */
+const RECRUIT_CLOSED_MESSAGE = "この募集は終了しているため、操作できません。";
 
 /** @original を編集して結果を本人に反映。失敗時はログのみ。 */
 const respond = async (
@@ -107,6 +110,11 @@ const handleRecruitJoin = async (
 
   if (!recruit) {
     await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
+    return;
+  }
+
+  if (!isRecruitActive(recruit.status)) {
+    await respond(env, interaction, { content: RECRUIT_CLOSED_MESSAGE });
     return;
   }
 
@@ -202,10 +210,20 @@ const handleRecruitTime = async (
     .where(eq(schema.recruits.id, recruitId))
     .get();
 
+  if (!recruit) {
+    await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
+    return;
+  }
+
+  if (!isRecruitActive(recruit.status)) {
+    await respond(env, interaction, { content: RECRUIT_CLOSED_MESSAGE });
+    return;
+  }
+
   const settings = await db
     .select()
     .from(schema.guildSettings)
-    .where(eq(schema.guildSettings.guildId, recruit?.guildId ?? ""))
+    .where(eq(schema.guildSettings.guildId, recruit.guildId))
     .get();
 
   const timezone = settings?.timezone ?? "Asia/Tokyo";
@@ -252,6 +270,22 @@ const handleRecruitCancel = async (
 
   const db = drizzle(env.DB, { schema });
 
+  const recruit = await db
+    .select()
+    .from(schema.recruits)
+    .where(eq(schema.recruits.id, recruitId))
+    .get();
+
+  if (!recruit) {
+    await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
+    return;
+  }
+
+  if (!isRecruitActive(recruit.status)) {
+    await respond(env, interaction, { content: RECRUIT_CLOSED_MESSAGE });
+    return;
+  }
+
   await db
     .delete(schema.recruitEntries)
     .where(
@@ -295,6 +329,11 @@ const handleSmallPartyConfirm = async (
 
   if (!recruit) {
     await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
+    return;
+  }
+
+  if (!isRecruitActive(recruit.status)) {
+    await respond(env, interaction, { content: RECRUIT_CLOSED_MESSAGE });
     return;
   }
 

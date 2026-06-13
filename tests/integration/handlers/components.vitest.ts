@@ -1,4 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { env } from "cloudflare:test";
+import type { APIMessageComponentInteraction } from "discord-api-types/v10";
+import { and, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as schema from "../../../src/db/schema";
+import { handleComponentInteraction } from "../../../src/handlers/components";
 import { buildMatchFromRecruit } from "../../../src/handlers/matching";
 
 describe("Component Interaction Handlers - Unit Tests", () => {
@@ -241,6 +247,141 @@ describe("Component Interaction Handlers - Unit Tests", () => {
 
       expect(result).toBeNull();
     });
+  });
+});
+
+describe("Component guards against closed recruits", () => {
+  const db = drizzle(env.DB, { schema });
+
+  // editOriginalInteractionResponse(@original) の PATCH 本文を捕捉するためのモック
+  const captureFetch = () => {
+    const calls: { url: string; body: unknown }[] = [];
+    globalThis.fetch = vi.fn((url: unknown, init?: RequestInit) => {
+      calls.push({
+        url: String(url),
+        body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+      });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(""),
+      } as Response);
+    }) as unknown as typeof fetch;
+    return calls;
+  };
+
+  // waitUntil の本処理を待ち合わせる ctx
+  const runComponent = async (interaction: APIMessageComponentInteraction) => {
+    const promises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        promises.push(p);
+      },
+    };
+    const response = handleComponentInteraction(interaction, env, ctx);
+    await Promise.all(promises);
+    return response;
+  };
+
+  const componentPayload = (customId: string): APIMessageComponentInteraction =>
+    ({
+      type: 3,
+      id: "i",
+      application_id: "test-app-id",
+      token: "tok",
+      member: { user: { id: "clicker" } },
+      data: { custom_id: customId, component_type: 2 },
+    }) as unknown as APIMessageComponentInteraction;
+
+  const insertClosedRecruit = (id: string, status: string) =>
+    db.insert(schema.recruits).values({
+      id,
+      scheduleId: "sched-x",
+      guildId: "guild-x",
+      channelId: "ch-x",
+      messageId: "msg-x",
+      targetDateLocal: "2026-06-15",
+      status,
+    });
+
+  beforeEach(async () => {
+    await db.delete(schema.recruitEntries);
+    await db.delete(schema.recruits);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("rejects join on a closed recruit and does not create an entry", async () => {
+    const calls = captureFetch();
+    await insertClosedRecruit("rec-closed", "closed");
+
+    const response = await runComponent(componentPayload("recruit:join:rec-closed"));
+    // 即時応答は ephemeral deferred
+    expect((response as { type: number }).type).toBe(5);
+
+    // @original 編集で「終了」を伝える
+    const original = calls.find((c) => c.url.includes("/messages/@original"));
+    expect((original?.body as { content?: string })?.content).toContain("終了");
+
+    // エントリは作られない
+    const entries = await db
+      .select()
+      .from(schema.recruitEntries)
+      .where(eq(schema.recruitEntries.recruitId, "rec-closed"))
+      .all();
+    expect(entries).toHaveLength(0);
+  });
+
+  it("rejects time selection on a cancelled recruit", async () => {
+    const calls = captureFetch();
+    await insertClosedRecruit("rec-cancelled", "cancelled");
+
+    const interaction = {
+      type: 3,
+      id: "i",
+      application_id: "test-app-id",
+      token: "tok",
+      member: { user: { id: "clicker" } },
+      data: {
+        custom_id: "recruit:time:rec-cancelled",
+        component_type: 3,
+        values: ["2026-06-15T11:00:00.000Z"],
+      },
+    } as unknown as APIMessageComponentInteraction;
+
+    await runComponent(interaction);
+
+    const original = calls.find((c) => c.url.includes("/messages/@original"));
+    expect((original?.body as { content?: string })?.content).toContain("終了");
+
+    const entries = await db
+      .select()
+      .from(schema.recruitEntries)
+      .where(
+        and(
+          eq(schema.recruitEntries.recruitId, "rec-cancelled"),
+          eq(schema.recruitEntries.userId, "clicker"),
+        ),
+      )
+      .all();
+    expect(entries).toHaveLength(0);
+  });
+
+  it("does not resurrect a closed recruit via cancel + recompute", async () => {
+    captureFetch();
+    await insertClosedRecruit("rec-closed2", "closed");
+
+    await runComponent(componentPayload("recruit:cancel:rec-closed2"));
+
+    const recruit = await db
+      .select()
+      .from(schema.recruits)
+      .where(eq(schema.recruits.id, "rec-closed2"))
+      .get();
+    // status は closed のまま（open/matched に戻らない）
+    expect(recruit?.status).toBe("closed");
   });
 });
 

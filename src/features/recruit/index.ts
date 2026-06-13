@@ -10,6 +10,9 @@ export type { Schedule, RecruitInstance, IntervalSchedule } from "./scheduler";
 export { isRecruitExpired } from "./expiry";
 export type { RecruitExpiry } from "./expiry";
 
+export { isRecruitActive } from "./status";
+export type { RecruitStatus } from "./status";
+
 export {
   applyConsent,
   buildSmallPartyProposal,
