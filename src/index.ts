@@ -13,6 +13,7 @@ import {
   handleComponentInteraction,
   handleScheduled,
 } from "./handlers";
+import { isSignatureBypassEnabled } from "./lib/security";
 import type { Env } from "./lib/types";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -27,11 +28,12 @@ app.post("/", async (c) => {
   const rawBody = await c.req.text();
 
   // 署名ヘッダの存在は常に必須。暗号検証のみ DISABLE_SIGNATURE_VERIFICATION で無効化可能。
+  // ただし本番(production)では isSignatureBypassEnabled が常に false を返し、無効化を許可しない。
   if (!signature || !timestamp) {
     return c.text("Bad Request", 401);
   }
 
-  if (env.DISABLE_SIGNATURE_VERIFICATION !== "true") {
+  if (!isSignatureBypassEnabled(env)) {
     const isValid = await verifyKey(rawBody, signature, timestamp, env.DISCORD_PUBLIC_KEY);
     if (!isValid) {
       return c.text("Bad Request", 401);
