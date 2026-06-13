@@ -151,6 +151,15 @@ const parseRankSafely = (rankJson: string | null): ValorantRank | null => {
   }
 };
 
+/**
+ * riot_accounts.rank に保存された JSON 文字列からランク表示名（例: "Gold 2"）を取り出す。
+ * 未ランク/未保存/不正は null。
+ */
+export const rankStringFromStored = (rankJson: string | null): string | null => {
+  const parsed = parseRankSafely(rankJson);
+  return parsed?.rank ?? null;
+};
+
 export async function fetchValorantRankWithCache(
   gameName: string,
   tagLine: string,
