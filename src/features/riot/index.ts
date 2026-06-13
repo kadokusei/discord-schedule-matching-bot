@@ -1,4 +1,5 @@
 export {
+  buildRiotAddOutcome,
   fetchValorantRank,
   fetchValorantRankWithCache,
   formatRankLabel,

@@ -19,10 +19,15 @@ export interface ValorantAccount {
   rank: ValorantRank | null;
 }
 
+/** 失敗理由のカテゴリ。ユーザー向け文言の出し分けに使う（error は詳細・ログ用）。 */
+export type FetchRankErrorCode = "not_found" | "rate_limited" | "upstream" | "network";
+
 export interface FetchRankResult {
   success: boolean;
   account: ValorantAccount | null;
   error: string | null;
+  /** 機械可読な失敗カテゴリ。success 時は undefined。 */
+  errorCode?: FetchRankErrorCode;
   fromCache?: boolean;
   remainingRequests?: number;
 }
@@ -44,14 +49,14 @@ export async function fetchValorantRank(
   platform = "pc",
 ): Promise<FetchRankResult> {
   try {
-    const response = await fetch(
-      `https://api.henrikdev.xyz/valorant/v3/mmr/${region}/${platform}/${gameName}/${tagLine}`,
-      {
-        headers: {
-          Authorization: apiKey,
-        },
+    // ゲーム名・タグは空白や記号を含み得るため、パスインジェクション/リクエスト破損を防ぐべく
+    // 全セグメントを encodeURIComponent でエンコードする。
+    const path = [region, platform, gameName, tagLine].map(encodeURIComponent).join("/");
+    const response = await fetch(`https://api.henrikdev.xyz/valorant/v3/mmr/${path}`, {
+      headers: {
+        Authorization: apiKey,
       },
-    );
+    });
 
     if (!response.ok) {
       const text = await response.text();
@@ -59,6 +64,7 @@ export async function fetchValorantRank(
         success: false,
         account: null,
         error: `API error: ${response.status} ${text}`,
+        errorCode: "upstream",
       };
     }
 
@@ -82,6 +88,7 @@ export async function fetchValorantRank(
         success: false,
         account: null,
         error: "Account not found",
+        errorCode: "not_found",
       };
     }
 
@@ -102,6 +109,7 @@ export async function fetchValorantRank(
       success: false,
       account: null,
       error: error instanceof Error ? error.message : "Unknown error",
+      errorCode: "network",
     };
   }
 }
@@ -140,6 +148,43 @@ export function formatRankLabel(account: ValorantAccount): string {
   }
   return `${account.name}#${account.tag} (${account.rank.rank})`;
 }
+
+/**
+ * /riot add の結果からユーザー向け文言とログ用詳細を生成する。
+ * 上流APIの生エラー（ステータス・本文）はユーザーに見せず汎用文言にし、
+ * 詳細は logDetail（呼び出し側で console.error する）へ回す。
+ */
+export const buildRiotAddOutcome = (
+  result: FetchRankResult,
+): { message: string; logDetail: string | null } => {
+  if (result.success && result.account) {
+    const cacheMessage = result.fromCache ? " (キャッシュ)" : "";
+    return {
+      message: `アカウントを登録しました${cacheMessage}: ${formatRankLabel(result.account)}`,
+      logDetail: null,
+    };
+  }
+
+  switch (result.errorCode) {
+    case "not_found":
+      return {
+        message:
+          "エラー: 指定したアカウントが見つかりませんでした。ゲーム名・タグ・リージョンをご確認ください",
+        logDetail: null,
+      };
+    case "rate_limited":
+      return {
+        message: "エラー: 現在リクエストが集中しています。しばらくしてから再度お試しください",
+        logDetail: result.error,
+      };
+    default:
+      // upstream / network / 未分類: 生エラーはユーザーに出さずログのみに残す
+      return {
+        message: "エラー: アカウント情報の取得に失敗しました。しばらくしてから再度お試しください",
+        logDetail: result.error,
+      };
+  }
+};
 
 const parseRankSafely = (rankJson: string | null): ValorantRank | null => {
   if (!rankJson) return null;
@@ -234,6 +279,7 @@ export async function fetchValorantRankWithCache(
       success: false,
       account: null,
       error: `Rate limit exceeded. Please wait ${Math.ceil((rateLimitResult.waitTimeMs ?? 0) / 1000)} seconds.`,
+      errorCode: "rate_limited",
       remainingRequests: 0,
     };
   }

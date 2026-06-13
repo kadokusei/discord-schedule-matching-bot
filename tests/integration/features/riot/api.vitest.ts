@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchValorantRank } from "../../../../src/features/riot/api";
+import { buildRiotAddOutcome, fetchValorantRank } from "../../../../src/features/riot/api";
+import type { FetchRankResult } from "../../../../src/features/riot/api";
 import { riotApiFixtures } from "../../../../src/fixtures/riot-api-responses";
 
 describe("fetchValorantRank", () => {
@@ -507,5 +508,100 @@ describe("fetchValorantRank", () => {
         },
       );
     });
+
+    it("should URL-encode game name and tag line containing spaces or special characters", async () => {
+      globalThis.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(riotApiFixtures.success[13]),
+        } as Response),
+      );
+
+      // 空白や `/` を含む Riot ID。未エンコードだとパスが壊れる/パスインジェクションの余地。
+      await fetchValorantRank("Some Player", "a/b", "api-key", "ap", "pc");
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        "https://api.henrikdev.xyz/valorant/v3/mmr/ap/pc/Some%20Player/a%2Fb",
+        {
+          headers: {
+            Authorization: "api-key",
+          },
+        },
+      );
+    });
+  });
+});
+
+describe("buildRiotAddOutcome", () => {
+  const account = {
+    name: "TestPlayer",
+    tag: "123",
+    rank: { tier: 12, division: "1", rank: "Gold 1" },
+  };
+
+  it("成功時は登録メッセージを返し、ログ詳細は出さない", () => {
+    const result: FetchRankResult = { success: true, account, error: null, fromCache: false };
+    const outcome = buildRiotAddOutcome(result);
+    expect(outcome.message).toContain("アカウントを登録しました");
+    expect(outcome.message).toContain("Gold 1");
+    expect(outcome.logDetail).toBeNull();
+  });
+
+  it("キャッシュ成功時は (キャッシュ) を付与する", () => {
+    const result: FetchRankResult = { success: true, account, error: null, fromCache: true };
+    expect(buildRiotAddOutcome(result).message).toContain("(キャッシュ)");
+  });
+
+  it("not_found は分かりやすいユーザー文言を返す（ログ詳細なし）", () => {
+    const result: FetchRankResult = {
+      success: false,
+      account: null,
+      error: "Account not found",
+      errorCode: "not_found",
+    };
+    const outcome = buildRiotAddOutcome(result);
+    expect(outcome.message).toContain("見つかりませんでした");
+    expect(outcome.logDetail).toBeNull();
+  });
+
+  it("upstream(生エラー)はユーザーに詳細を出さず、ログ詳細へ回す", () => {
+    const raw = 'API error: 401 {"status":401,"message":"Invalid API key abc123"}';
+    const result: FetchRankResult = {
+      success: false,
+      account: null,
+      error: raw,
+      errorCode: "upstream",
+    };
+    const outcome = buildRiotAddOutcome(result);
+    // ユーザー向けには生のステータス/本文/キーが一切出ない
+    expect(outcome.message).not.toContain("401");
+    expect(outcome.message).not.toContain("API key");
+    expect(outcome.message).toContain("取得に失敗しました");
+    // 詳細はログ側に保持
+    expect(outcome.logDetail).toBe(raw);
+  });
+
+  it("network も同様に汎用文言＋ログ詳細", () => {
+    const result: FetchRankResult = {
+      success: false,
+      account: null,
+      error: "Network request failed",
+      errorCode: "network",
+    };
+    const outcome = buildRiotAddOutcome(result);
+    expect(outcome.message).toContain("取得に失敗しました");
+    expect(outcome.logDetail).toBe("Network request failed");
+  });
+
+  it("rate_limited は集中案内文言を返す", () => {
+    const result: FetchRankResult = {
+      success: false,
+      account: null,
+      error: "Rate limit exceeded. Please wait 30 seconds.",
+      errorCode: "rate_limited",
+    };
+    const outcome = buildRiotAddOutcome(result);
+    expect(outcome.message).toContain("リクエストが集中");
   });
 });
