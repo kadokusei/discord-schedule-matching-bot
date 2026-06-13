@@ -396,4 +396,40 @@ describe("Command Handlers - Integration Tests", () => {
       expect(content).not.toContain("Player2#456");
     });
   });
+
+  describe("/schedule help", () => {
+    it("should return ephemeral usage for all schedule subcommands without DB writes", async () => {
+      const response = await dispatch(buildCommandInteraction("schedule", "help", []));
+
+      const data = (response as { data?: { content?: string; flags?: number } }).data;
+      const content = data?.content ?? "";
+      // ephemeral（本人のみ表示）であること
+      expect((data?.flags ?? 0) & 64).toBe(64);
+      // 各サブコマンド名が使い方として含まれること
+      expect(content).toContain("create");
+      expect(content).toContain("settings");
+      expect(content).toContain("list");
+      expect(content).toContain("delete");
+
+      // 副作用がないこと
+      const schedules = await db.select().from(schema.schedules).all();
+      expect(schedules).toHaveLength(0);
+    });
+  });
+
+  describe("/riot help", () => {
+    it("should return ephemeral usage for all riot subcommands without DB writes", async () => {
+      const response = await dispatch(buildCommandInteraction("riot", "help", []));
+
+      const data = (response as { data?: { content?: string; flags?: number } }).data;
+      const content = data?.content ?? "";
+      expect((data?.flags ?? 0) & 64).toBe(64);
+      expect(content).toContain("add");
+      expect(content).toContain("remove");
+      expect(content).toContain("list");
+
+      const accounts = await db.select().from(schema.riotAccounts).all();
+      expect(accounts).toHaveLength(0);
+    });
+  });
 });

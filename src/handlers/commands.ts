@@ -33,6 +33,52 @@ const deferredEphemeral = (): APIInteractionResponse => ({
   data: { flags: MessageFlags.Ephemeral },
 });
 
+/** /schedule の使い方（register-commands.ts の定義と内容を揃える） */
+const SCHEDULE_HELP = [
+  "📅 **schedule コマンドの使い方**",
+  "",
+  "▸ **/schedule create** — 募集スケジュールを作成します",
+  "　・post_time（必須）: 投稿時間（HH:MM形式）例: 20:00",
+  "　・interval（任意）: 募集枠の間隔（分）省略時はサーバー設定 or 30分",
+  "　・duration（任意）: 募集期間（分）省略時はサーバー設定 or 360分",
+  "　例) /schedule create post_time:20:00 interval:60 duration:180",
+  "",
+  "▸ **/schedule settings** — サーバー設定を変更します",
+  "　・timezone（必須）: タイムゾーン 例: Asia/Tokyo",
+  "　例) /schedule settings timezone:Asia/Tokyo",
+  "",
+  "▸ **/schedule list** — 登録済みの定期予定を一覧表示します",
+  "　引数はありません。",
+  "",
+  "▸ **/schedule delete** — 定期予定を削除します",
+  "　・id（必須）: 削除する定期予定（入力時に候補から選択できます）",
+  "　※ サーバー内の誰でも削除できます。関連する募集メッセージも削除されます。",
+  "",
+  "▸ **/schedule help** — このヘルプを表示します",
+].join("\n");
+
+/** /riot の使い方（register-commands.ts の定義と内容を揃える） */
+const RIOT_HELP = [
+  "🎮 **riot コマンドの使い方**",
+  "",
+  "▸ **/riot add** — VALORANTアカウントを追加します",
+  "　・game_name（必須）: ゲーム名（「名前#タグ」のように # を含めて指定も可）",
+  "　・tag_line（任意）: タグライン（game_name に # を含めない場合は必須）",
+  "　・region（任意）: リージョン（ap / na / eu / kr / latam / br）",
+  "　例) /riot add game_name:Player#JP1",
+  "　例) /riot add game_name:Player tag_line:JP1 region:ap",
+  "",
+  "▸ **/riot remove** — VALORANTアカウントを削除します",
+  "　・game_name（任意）/ tag_line（任意）: 両方指定でそのアカウントのみ削除",
+  "　※ 両方とも省略すると、登録済みの全アカウントを削除します。",
+  "　例) /riot remove game_name:Player tag_line:JP1",
+  "",
+  "▸ **/riot list** — 登録済みのVALORANTアカウントを一覧表示します",
+  "　引数はありません。",
+  "",
+  "▸ **/riot help** — このヘルプを表示します",
+].join("\n");
+
 const getUserId = (interaction: APIApplicationCommandInteraction): string =>
   interaction.member?.user?.id ?? interaction.user?.id ?? "";
 
@@ -64,6 +110,7 @@ export const handleCommandInteraction = async (
   const sub = getSubcommand(data);
 
   if (data.name === "schedule") {
+    if (sub?.name === "help") return ephemeral(SCHEDULE_HELP);
     if (sub?.name === "create") return handleScheduleCreate(interaction, sub.options, env);
     if (sub?.name === "settings") return handleScheduleSettings(interaction, sub.options, env);
     if (sub?.name === "list") return handleScheduleList(interaction, env);
@@ -71,6 +118,7 @@ export const handleCommandInteraction = async (
   }
 
   if (data.name === "riot") {
+    if (sub?.name === "help") return ephemeral(RIOT_HELP);
     if (sub?.name === "add") return handleRiotAccountAdd(interaction, sub.options, env, ctx);
     if (sub?.name === "remove") return handleRiotAccountRemove(interaction, sub.options, env);
     if (sub?.name === "list") return handleRiotAccountList(interaction, env);

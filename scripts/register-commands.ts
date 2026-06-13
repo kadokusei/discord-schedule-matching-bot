@@ -65,6 +65,11 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
           },
         ],
       },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "help",
+        description: "scheduleコマンドの使い方を表示します",
+      },
     ],
   },
   {
@@ -116,6 +121,11 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
         type: ApplicationCommandOptionType.Subcommand,
         name: "list",
         description: "登録済みのVALORANTアカウントを一覧表示します",
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "help",
+        description: "riotコマンドの使い方を表示します",
       },
     ],
   },
