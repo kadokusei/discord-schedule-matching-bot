@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX `user_id_game_name_tag_line_unique` ON `riot_accounts` (`user_id`,`game_name`,`tag_line`);
