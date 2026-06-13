@@ -1,12 +1,46 @@
 import { env } from "cloudflare:test";
-import type { CommandContext } from "discord-hono";
+import type { APIApplicationCommandInteraction } from "discord-api-types/v10";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../src/db/schema";
-import type { Env } from "../../../src/lib/types";
+import { handleCommandInteraction } from "../../../src/handlers/commands";
 
-type MockCommandContext = Partial<CommandContext<{ Bindings: Env }>>;
+type SubOption = { name: string; value: string | number; type?: number };
+
+// サブコマンドのネストした APPLICATION_COMMAND ペイロードを構築する
+const buildCommandInteraction = (
+  commandName: string,
+  subName: string,
+  options: SubOption[],
+  ctxIds: { guildId?: string; channelId?: string; userId?: string } = {},
+): APIApplicationCommandInteraction =>
+  ({
+    type: 2,
+    id: "interaction-id",
+    application_id: "test-app-id",
+    token: "interaction-token",
+    guild_id: ctxIds.guildId,
+    channel: ctxIds.channelId ? { id: ctxIds.channelId } : undefined,
+    member: ctxIds.userId ? { user: { id: ctxIds.userId } } : undefined,
+    data: {
+      id: "cmd-id",
+      name: commandName,
+      type: 1,
+      options: [
+        {
+          type: 1, // SUB_COMMAND
+          name: subName,
+          options: options.map((o) => ({ type: o.type ?? 3, name: o.name, value: o.value })),
+        },
+      ],
+    },
+  }) as unknown as APIApplicationCommandInteraction;
+
+const noopCtx = { waitUntil: () => {} };
+
+const dispatch = (interaction: APIApplicationCommandInteraction) =>
+  handleCommandInteraction(interaction, env, noopCtx);
 
 describe("Command Handlers - Integration Tests", () => {
   const db = drizzle(env.DB, { schema });
@@ -18,33 +52,20 @@ describe("Command Handlers - Integration Tests", () => {
     vi.clearAllMocks();
   });
 
-  describe("handlerScheduleRecruit", () => {
+  describe("/schedule recruit", () => {
     it("should create schedule with provided options", async () => {
-      const { handlerScheduleRecruit } = await import("../../../src/handlers/commands");
-
-      const mockContext: MockCommandContext = {
-        interaction: {
-          guild_id: "test-guild",
-          channel_id: "test-channel",
-          member: { user: { id: "test-user" } },
-          data: {
-            options: [
-              { name: "post_time", value: "20:00" },
-              { name: "interval", value: 60 },
-              { name: "duration", value: 180 },
-            ],
-          },
-        } as never,
-        env: {
-          DB: env.DB,
-          HENRIKDEV_API_KEY: "test-key",
-          DISCORD_PUBLIC_KEY: "test",
-          DISCORD_BOT_TOKEN: "test",
-        },
-        res: vi.fn() as never,
-      };
-
-      await handlerScheduleRecruit(mockContext as CommandContext<{ Bindings: Env }>);
+      await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "recruit",
+          [
+            { name: "post_time", value: "20:00" },
+            { name: "interval", value: 60, type: 4 },
+            { name: "duration", value: 180, type: 4 },
+          ],
+          { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
+        ),
+      );
 
       const schedules = await db.select().from(schema.schedules).all();
       expect(schedules).toHaveLength(1);
@@ -54,8 +75,6 @@ describe("Command Handlers - Integration Tests", () => {
     });
 
     it("should use default settings when options not provided", async () => {
-      const { handlerScheduleRecruit } = await import("../../../src/handlers/commands");
-
       await db.insert(schema.guildSettings).values({
         id: crypto.randomUUID(),
         guildId: "test-guild",
@@ -64,25 +83,13 @@ describe("Command Handlers - Integration Tests", () => {
         defaultDurationMin: 240,
       });
 
-      const mockContext: MockCommandContext = {
-        interaction: {
-          guild_id: "test-guild",
-          channel_id: "test-channel",
-          member: { user: { id: "test-user" } },
-          data: {
-            options: [{ name: "post_time", value: "21:00" }],
-          },
-        } as never,
-        env: {
-          DB: env.DB,
-          HENRIKDEV_API_KEY: "test-key",
-          DISCORD_PUBLIC_KEY: "test",
-          DISCORD_BOT_TOKEN: "test",
-        },
-        res: vi.fn() as never,
-      };
-
-      await handlerScheduleRecruit(mockContext as CommandContext<{ Bindings: Env }>);
+      await dispatch(
+        buildCommandInteraction("schedule", "recruit", [{ name: "post_time", value: "21:00" }], {
+          guildId: "test-guild",
+          channelId: "test-channel",
+          userId: "test-user",
+        }),
+      );
 
       const schedules = await db.select().from(schema.schedules).all();
       expect(schedules[0]?.intervalMin).toBe(45);
@@ -90,36 +97,20 @@ describe("Command Handlers - Integration Tests", () => {
     });
 
     it("should return error for invalid time format", async () => {
-      const { handlerScheduleRecruit } = await import("../../../src/handlers/commands");
+      const response = await dispatch(
+        buildCommandInteraction("schedule", "recruit", [{ name: "post_time", value: "invalid" }], {
+          guildId: "test-guild",
+          channelId: "test-channel",
+          userId: "test-user",
+        }),
+      );
 
-      const mockContext: MockCommandContext = {
-        interaction: {
-          guild_id: "test-guild",
-          channel_id: "test-channel",
-          member: { user: { id: "test-user" } },
-          data: {
-            options: [{ name: "post_time", value: "invalid" }],
-          },
-        } as never,
-        env: {
-          DB: env.DB,
-          HENRIKDEV_API_KEY: "test-key",
-          DISCORD_PUBLIC_KEY: "test",
-          DISCORD_BOT_TOKEN: "test",
-        },
-        res: vi.fn() as never,
-      };
-
-      await handlerScheduleRecruit(mockContext as CommandContext<{ Bindings: Env }>);
-
-      expect(mockContext.res).toHaveBeenCalledWith(expect.stringContaining("エラー"));
+      expect((response as { data?: { content?: string } }).data?.content).toContain("エラー");
     });
   });
 
-  describe("handlerScheduleSettings", () => {
+  describe("/schedule settings", () => {
     it("should update timezone for existing guild", async () => {
-      const { handlerScheduleSettings } = await import("../../../src/handlers/commands");
-
       const existingId = crypto.randomUUID();
       await db.insert(schema.guildSettings).values({
         id: existingId,
@@ -127,23 +118,14 @@ describe("Command Handlers - Integration Tests", () => {
         timezone: "America/New_York",
       });
 
-      const mockContext: MockCommandContext = {
-        interaction: {
-          guild_id: "test-guild",
-          data: {
-            options: [{ name: "timezone", value: "Asia/Tokyo" }],
-          },
-        } as never,
-        env: {
-          DB: env.DB,
-          HENRIKDEV_API_KEY: "test-key",
-          DISCORD_PUBLIC_KEY: "test",
-          DISCORD_BOT_TOKEN: "test",
-        },
-        res: vi.fn() as never,
-      };
-
-      await handlerScheduleSettings(mockContext as CommandContext<{ Bindings: Env }>);
+      await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "settings",
+          [{ name: "timezone", value: "Asia/Tokyo" }],
+          { guildId: "test-guild" },
+        ),
+      );
 
       const settings = await db
         .select()
@@ -156,25 +138,11 @@ describe("Command Handlers - Integration Tests", () => {
     });
 
     it("should create new settings for new guild", async () => {
-      const { handlerScheduleSettings } = await import("../../../src/handlers/commands");
-
-      const mockContext: MockCommandContext = {
-        interaction: {
-          guild_id: "test-guild",
-          data: {
-            options: [{ name: "timezone", value: "UTC" }],
-          },
-        } as never,
-        env: {
-          DB: env.DB,
-          HENRIKDEV_API_KEY: "test-key",
-          DISCORD_PUBLIC_KEY: "test",
-          DISCORD_BOT_TOKEN: "test",
-        },
-        res: vi.fn() as never,
-      };
-
-      await handlerScheduleSettings(mockContext as CommandContext<{ Bindings: Env }>);
+      await dispatch(
+        buildCommandInteraction("schedule", "settings", [{ name: "timezone", value: "UTC" }], {
+          guildId: "test-guild",
+        }),
+      );
 
       const settings = await db
         .select()
@@ -186,31 +154,18 @@ describe("Command Handlers - Integration Tests", () => {
     });
   });
 
-  describe("handlerRiotAccountList", () => {
+  describe("/riot list", () => {
     it("should return empty message when no accounts", async () => {
-      const { handlerRiotAccountList } = await import("../../../src/handlers/commands");
+      const response = await dispatch(
+        buildCommandInteraction("riot", "list", [], { userId: "test-user" }),
+      );
 
-      const mockContext: MockCommandContext = {
-        interaction: {
-          member: { user: { id: "test-user" } },
-        } as never,
-        env: {
-          DB: env.DB,
-          HENRIKDEV_API_KEY: "test-key",
-          DISCORD_PUBLIC_KEY: "test",
-          DISCORD_BOT_TOKEN: "test",
-        },
-        res: vi.fn() as never,
-      };
-
-      await handlerRiotAccountList(mockContext as CommandContext<{ Bindings: Env }>);
-
-      expect(mockContext.res).toHaveBeenCalledWith("登録されているアカウントはありません");
+      expect((response as { data?: { content?: string } }).data?.content).toBe(
+        "登録されているアカウントはありません",
+      );
     });
 
-    it("should list all user accounts", async () => {
-      const { handlerRiotAccountList } = await import("../../../src/handlers/commands");
-
+    it("should list all user accounts with parsed rank", async () => {
       const userId = "test-user";
       await db.insert(schema.riotAccounts).values([
         {
@@ -218,7 +173,7 @@ describe("Command Handlers - Integration Tests", () => {
           userId,
           gameName: "Player1",
           tagLine: "123",
-          region: "na",
+          region: "ap",
           rank: JSON.stringify({ tier: 10, division: "2", rank: "Gold 2" }),
           createdAtUtc: new Date().toISOString(),
           lastFetchedAtUtc: new Date().toISOString(),
@@ -228,78 +183,53 @@ describe("Command Handlers - Integration Tests", () => {
           userId,
           gameName: "Player2",
           tagLine: "456",
-          region: "na",
+          region: "ap",
           rank: JSON.stringify({ tier: 15, division: "1", rank: "Platinum 1" }),
           createdAtUtc: new Date().toISOString(),
           lastFetchedAtUtc: new Date().toISOString(),
         },
       ]);
 
-      const mockContext: MockCommandContext = {
-        interaction: {
-          member: { user: { id: userId } },
-        } as never,
-        env: {
-          DB: env.DB,
-          HENRIKDEV_API_KEY: "test-key",
-          DISCORD_PUBLIC_KEY: "test",
-          DISCORD_BOT_TOKEN: "test",
-        },
-        res: vi.fn() as never,
-      };
+      const response = await dispatch(buildCommandInteraction("riot", "list", [], { userId }));
 
-      await handlerRiotAccountList(mockContext as CommandContext<{ Bindings: Env }>);
-
-      expect(mockContext.res).toHaveBeenCalledWith(expect.stringContaining("Player1#123"));
-      expect(mockContext.res).toHaveBeenCalledWith(expect.stringContaining("Player2#456"));
+      const content = (response as { data?: { content?: string } }).data?.content ?? "";
+      expect(content).toContain("Player1#123 (Gold 2)");
+      expect(content).toContain("Player2#456 (Platinum 1)");
+      // 生 JSON ではなく rank.rank が表示されること
+      expect(content).not.toContain("tier");
     });
 
     it("should return only accounts for the requesting user", async () => {
-      const { handlerRiotAccountList } = await import("../../../src/handlers/commands");
-
-      const user1 = "user1";
-      const user2 = "user2";
-
       await db.insert(schema.riotAccounts).values([
         {
           id: crypto.randomUUID(),
-          userId: user1,
+          userId: "user1",
           gameName: "Player1",
           tagLine: "123",
-          region: "na",
+          region: "ap",
           rank: JSON.stringify({ tier: 10, division: "2", rank: "Gold 2" }),
           createdAtUtc: new Date().toISOString(),
           lastFetchedAtUtc: new Date().toISOString(),
         },
         {
           id: crypto.randomUUID(),
-          userId: user2,
+          userId: "user2",
           gameName: "Player2",
           tagLine: "456",
-          region: "na",
+          region: "ap",
           rank: JSON.stringify({ tier: 15, division: "1", rank: "Platinum 1" }),
           createdAtUtc: new Date().toISOString(),
           lastFetchedAtUtc: new Date().toISOString(),
         },
       ]);
 
-      const mockContext: MockCommandContext = {
-        interaction: {
-          member: { user: { id: user1 } },
-        } as never,
-        env: {
-          DB: env.DB,
-          HENRIKDEV_API_KEY: "test-key",
-          DISCORD_PUBLIC_KEY: "test",
-          DISCORD_BOT_TOKEN: "test",
-        },
-        res: vi.fn() as never,
-      };
+      const response = await dispatch(
+        buildCommandInteraction("riot", "list", [], { userId: "user1" }),
+      );
 
-      await handlerRiotAccountList(mockContext as CommandContext<{ Bindings: Env }>);
-
-      expect(mockContext.res).toHaveBeenCalledWith(expect.stringContaining("Player1#123"));
-      expect(mockContext.res).not.toHaveBeenCalledWith(expect.stringContaining("Player2#456"));
+      const content = (response as { data?: { content?: string } }).data?.content ?? "";
+      expect(content).toContain("Player1#123");
+      expect(content).not.toContain("Player2#456");
     });
   });
 });

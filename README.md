@@ -102,10 +102,37 @@ bun test             # Bun組み込みテストランナー（ユニットテス
 - `*.test.ts`: Bun組み込みとVitest両方で実行されるユニットテスト
 - `*.vitest.ts`: Vitest専用（Cloudflare Workers環境が必要なintegrationテストなど）
 
+### スラッシュコマンドの登録
+
+Bot を初めて使う前に、Discord にスラッシュコマンドを登録する必要があります。
+`DISCORD_APPLICATION_ID`（Discord Developer Portal で取得）と `DISCORD_BOT_TOKEN` を環境変数に設定して実行します。
+
+```bash
+# テストギルドに即時登録（DISCORD_TEST_GUILD_ID を設定した場合）
+DISCORD_APPLICATION_ID=<app_id> DISCORD_BOT_TOKEN=<bot_token> DISCORD_TEST_GUILD_ID=<guild_id> \
+  bun run scripts/register-commands.ts
+
+# グローバル登録（反映に最大1時間。DISCORD_TEST_GUILD_ID を省略）
+DISCORD_APPLICATION_ID=<app_id> DISCORD_BOT_TOKEN=<bot_token> \
+  bun run scripts/register-commands.ts
+```
+
+> Interactions Endpoint URL は Worker のルート（`https://<worker>/`）を指定します。
+
 ### ローカル開発
 
 ```bash
 bun run dev
+```
+
+### Lint / Format / 型チェック
+
+```bash
+bun run lint          # oxlint
+bun run format        # oxfmt（書き込み）
+bun run format:check  # oxfmt（チェックのみ）
+bun run typecheck     # tsc --noEmit
+bun run check         # 型チェック + lint + format:check + テストを一括実行
 ```
 
 ### デプロイ
@@ -130,21 +157,22 @@ bun run deploy
 
 - `timezone`: タイムゾーン（例: Asia/Tokyo）
 
-### `/riot account add`
+### `/riot add`
 
 VALORANTアカウントを登録します。
 
-- `game_name`: ゲーム名
-- `tag_line`: タグライン（#以降の文字列）
+- `game_name`: ゲーム名（`#タグ` を含めることも可）
+- `tag_line`: タグライン（`game_name` に `#` がない場合必須）
+- `region`: リージョン（ap/na/eu/kr/latam/br、既定 ap）※オプション
 
-### `/riot account remove`
+### `/riot remove`
 
 登録したアカウントを削除します。
 
-- `game_name`: ゲーム名 ※オプション（省略時は全て削除）
+- `game_name`: ゲーム名 ※オプション（両方省略時は全て削除）
 - `tag_line`: タグライン ※オプション
 
-### `/riot account list`
+### `/riot list`
 
 登録済みのアカウント一覧を表示します。
 

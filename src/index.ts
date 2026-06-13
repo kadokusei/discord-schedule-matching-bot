@@ -13,21 +13,22 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.get("/", (c) => c.text("Discord VALORANT Schedule Matching Bot"));
 
-app.post("/interactions", async (c) => {
+// Discord Interaction エンドポイント（Developer Portal の Interactions Endpoint URL）
+app.post("/", async (c) => {
   const env = c.env;
   const signature = c.req.header("X-Signature-Ed25519");
   const timestamp = c.req.header("X-Signature-Timestamp");
   const rawBody = await c.req.text();
 
-  const skipVerify = env.DISABLE_SIGNATURE_VERIFICATION === "true";
+  // 署名ヘッダの存在は常に必須。暗号検証のみ DISABLE_SIGNATURE_VERIFICATION で無効化可能。
+  if (!signature || !timestamp) {
+    return c.text("Bad Request", 401);
+  }
 
-  if (!skipVerify) {
-    if (!signature || !timestamp) {
-      return c.json({ error: "Bad request signature" }, 401);
-    }
+  if (env.DISABLE_SIGNATURE_VERIFICATION !== "true") {
     const isValid = await verifyKey(rawBody, signature, timestamp, env.DISCORD_PUBLIC_KEY);
     if (!isValid) {
-      return c.json({ error: "Bad request signature" }, 401);
+      return c.text("Bad Request", 401);
     }
   }
 
@@ -56,7 +57,7 @@ app.post("/interactions", async (c) => {
     }
 
     default:
-      return c.json({ error: "Unknown interaction type" }, 400);
+      return c.text("Unknown Type", 400);
   }
 });
 

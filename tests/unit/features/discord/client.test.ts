@@ -5,10 +5,12 @@ import {
   postRecruitMessage,
   updateDiscordMessage,
 } from "../../../../src/features/discord";
+import type { Env } from "../../../../src/lib/types";
 
 const buildEnv = (token: string): Env => ({
   DISCORD_PUBLIC_KEY: "test-public-key",
   DISCORD_BOT_TOKEN: token,
+  DISCORD_APPLICATION_ID: "test-app-id",
   HENRIKDEV_API_KEY: "test-riot-key",
   DB: {
     prepare: vi.fn(),
@@ -60,7 +62,10 @@ describe("Discord API Client", () => {
             "Content-Type": "application/json",
             Authorization: "Bot test-token",
           },
-          body: JSON.stringify({ content: "Test message" }),
+          body: JSON.stringify({
+            content: "Test message",
+            allowed_mentions: { parse: [] },
+          }),
         },
       );
     });

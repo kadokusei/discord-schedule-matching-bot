@@ -18,7 +18,7 @@ describe("RateLimiter", () => {
       const result = await limiter.checkRateLimit();
 
       expect(result.allowed).toBe(true);
-      expect(result.remainingRequests).toBe(29); // 30 - 1 (already recorded)
+      expect(result.remainingRequests).toBe(24); // 25 - 1 (already recorded)
     });
 
     it("should decrease remaining requests after each call", async () => {
@@ -31,7 +31,7 @@ describe("RateLimiter", () => {
 
       const result = await limiter.checkRateLimit();
       expect(result.allowed).toBe(true);
-      expect(result.remainingRequests).toBe(24); // 30 - 6 (5 + 1 current)
+      expect(result.remainingRequests).toBe(19); // 25 - 6 (5 + 1 current)
     });
 
     it("should block requests when rate limit exceeded", async () => {

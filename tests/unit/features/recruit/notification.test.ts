@@ -47,7 +47,10 @@ describe("diffMatch", () => {
 
     expect(result.type).toBe("updated");
     expect(result.memberDiff).toBeNull();
-    expect(result.timeDiff).toEqual({ prev: "21:00", next: "22:00" });
+    expect(result.timeDiff).toEqual({
+      prevUtc: "2026-01-16T21:00:00.000Z",
+      nextUtc: "2026-01-16T22:00:00.000Z",
+    });
   });
 
   it("should detect both member and time change", () => {
@@ -64,7 +67,10 @@ describe("diffMatch", () => {
 
     expect(result.type).toBe("updated");
     expect(result.memberDiff).toEqual({ removed: ["user5"], added: ["user6"] });
-    expect(result.timeDiff).toEqual({ prev: "21:00", next: "22:00" });
+    expect(result.timeDiff).toEqual({
+      prevUtc: "2026-01-16T21:00:00.000Z",
+      nextUtc: "2026-01-16T22:00:00.000Z",
+    });
   });
 
   it("should detect cancelled when no next match", () => {
@@ -113,7 +119,8 @@ describe("formatNotification", () => {
 
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
-    expect(result).toBe("【確定】@user1 @user2 @user3 @user4 @user5 集合 21:00");
+    // 21:00Z は Asia/Tokyo では翌 06:00、メンバーは実メンション(<@id>)
+    expect(result).toBe("【確定】<@user1> <@user2> <@user3> <@user4> <@user5> 集合 06:00");
   });
 
   it("should format member change notification", () => {
@@ -129,15 +136,19 @@ describe("formatNotification", () => {
 
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
-    expect(result).toContain("メンバー変更: (前) @user5 → (今) @user6");
-    expect(result).toContain("集合 21:00");
+    // 21:00Z → JST 06:00
+    expect(result).toContain("メンバー変更: (前) <@user5> → (今) <@user6>");
+    expect(result).toContain("集合 06:00");
   });
 
   it("should format time change notification", () => {
     const diff = {
       type: "updated" as const,
       memberDiff: null,
-      timeDiff: { prev: "21:00", next: "22:00" },
+      timeDiff: {
+        prevUtc: "2026-01-16T21:00:00.000Z",
+        nextUtc: "2026-01-16T22:00:00.000Z",
+      },
     };
     const match = {
       memberIds: ["user1", "user2", "user3", "user4", "user5"],
@@ -146,14 +157,18 @@ describe("formatNotification", () => {
 
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
-    expect(result).toContain("集合時刻: 21:00 → 22:00");
+    // 21:00Z→06:00 / 22:00Z→07:00 (JST)
+    expect(result).toContain("集合時刻: 06:00 → 07:00");
   });
 
   it("should format both changes notification", () => {
     const diff = {
       type: "updated" as const,
       memberDiff: { removed: ["user5"], added: ["user6"] },
-      timeDiff: { prev: "21:00", next: "22:00" },
+      timeDiff: {
+        prevUtc: "2026-01-16T21:00:00.000Z",
+        nextUtc: "2026-01-16T22:00:00.000Z",
+      },
     };
     const match = {
       memberIds: ["user1", "user2", "user3", "user4", "user6"],
@@ -162,8 +177,8 @@ describe("formatNotification", () => {
 
     const result = formatNotification(diff, match, "Asia/Tokyo");
 
-    expect(result).toContain("メンバー変更: (前) @user5 → (今) @user6");
-    expect(result).toContain("集合 21:00→22:00");
+    expect(result).toContain("メンバー変更: (前) <@user5> → (今) <@user6>");
+    expect(result).toContain("集合時刻: 06:00 → 07:00");
   });
 
   it("should format cancelled notification", () => {

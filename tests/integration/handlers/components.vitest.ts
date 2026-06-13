@@ -90,7 +90,7 @@ describe("Component Interaction Handlers - Unit Tests", () => {
         }
 
         result.messageLogged = true;
-      } catch (error) {
+      } catch {
         // Error should be caught and handled gracefully
         result.errorHandled = true;
       }

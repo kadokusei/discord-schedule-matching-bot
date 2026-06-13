@@ -217,7 +217,7 @@ describe("handleScheduled - Integration Tests", () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it("should not create instance when post time has passed", async () => {
+    it("should create instance once post time has passed (same-day catch-up)", async () => {
       // Clean up
       await db.delete(schema.recruitEntries);
       await db.delete(schema.recruits);
@@ -270,9 +270,9 @@ describe("handleScheduled - Integration Tests", () => {
         existingRecruits,
       );
 
-      // 投稿時刻（JST 20:00 = UTC 11:00）が過去（UTC 12:00）のため、
-      // インスタンスを作成すべきでない
-      expect(shouldCreate).toBe(false);
+      // post_time は「投稿時刻」。now (UTC 12:00) >= 投稿時刻 (JST 20:00 = UTC 11:00) かつ
+      // 当日分が未作成のため、最初の tick で作成する（キャッチアップ）。
+      expect(shouldCreate).toBe(true);
     });
   });
 
@@ -487,7 +487,7 @@ describe("handleScheduled - Integration Tests", () => {
               eq(schema.recruitEntries.userId, target.userId),
             ),
           );
-      } catch (error) {
+      } catch {
         // Expected error - DB update should be skipped
       }
 

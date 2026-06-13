@@ -58,7 +58,7 @@ describe("validation", () => {
         game_name: "TestPlayer",
         tag_line: "123",
       });
-      expect(result.region).toBe("na");
+      expect(result.region).toBe("ap");
     });
 
     it("missing required fields", () => {

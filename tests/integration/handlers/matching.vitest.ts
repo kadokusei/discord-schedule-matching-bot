@@ -97,7 +97,7 @@ describe("recomputeMatch - Integration Tests", () => {
     });
     globalThis.fetch = mockFetch as typeof globalThis.fetch;
 
-    await recomputeMatch({ env }, recruitId);
+    await recomputeMatch(env, recruitId);
 
     const recruit = await db
       .select()
@@ -136,7 +136,7 @@ describe("recomputeMatch - Integration Tests", () => {
     );
     globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
 
-    await recomputeMatch({ env }, recruitId);
+    await recomputeMatch(env, recruitId);
 
     const recruit = await db
       .select()
@@ -175,7 +175,7 @@ describe("recomputeMatch - Integration Tests", () => {
     // Suppress expected console.error
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await recomputeMatch({ env }, recruitId);
+    await recomputeMatch(env, recruitId);
 
     // DB should remain unchanged (status stays "open", no match fields set)
     const recruit = await db
@@ -195,7 +195,7 @@ describe("recomputeMatch - Integration Tests", () => {
     globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
 
     // Should not throw
-    await recomputeMatch({ env }, "non-existent-id");
+    await recomputeMatch(env, "non-existent-id");
 
     // No Discord API calls should be made
     expect(mockFetch).not.toHaveBeenCalled();
@@ -225,7 +225,7 @@ describe("recomputeMatch - Integration Tests", () => {
     });
     globalThis.fetch = mockFetch as typeof globalThis.fetch;
 
-    await recomputeMatch({ env }, recruitId);
+    await recomputeMatch(env, recruitId);
 
     // Should have called:
     // 1. PATCH to update Discord embed (matched status)

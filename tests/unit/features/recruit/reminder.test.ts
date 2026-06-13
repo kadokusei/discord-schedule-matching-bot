@@ -273,7 +273,7 @@ describe("handleScheduled - reminder failure handling", () => {
         }
 
         results.push({ success: true, userId: target.userId });
-      } catch (error) {
+      } catch {
         results.push({ success: false, userId: target.userId });
       }
     }
@@ -334,7 +334,7 @@ describe("handleScheduled - reminder failure handling", () => {
         // Step 2: Only update DB after successful message send
         dbUpdateCalled = true;
         dbUpdates.push(target.userId);
-      } catch (error) {
+      } catch {
         // If message send fails, DB update should be skipped
       }
     }
@@ -375,7 +375,7 @@ describe("handleScheduled - reminder failure handling", () => {
 
       // This should not be reached
       dbUpdates.push(target.userId);
-    } catch (error) {
+    } catch {
       // If message send fails, DB update should be skipped
     }
 

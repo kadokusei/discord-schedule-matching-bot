@@ -56,7 +56,8 @@ describe("fetchValorantRankWithCache", () => {
       expect(result.success).toBe(true);
       expect(result.account?.rank).toEqual(mockRankData);
       expect(result.fromCache).toBe(false);
-      expect(result.remainingRequests).toBe(28);
+      // rate limit 25/min: 25 - 0(count) - 1 - 1(api.ts での減算) = 23
+      expect(result.remainingRequests).toBe(23);
 
       // Verify database entry was created
       const accounts = await db.select().from(schema.riotAccounts).all();

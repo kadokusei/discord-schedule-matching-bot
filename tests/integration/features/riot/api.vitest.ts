@@ -197,7 +197,7 @@ describe("fetchValorantRank", () => {
         expect(result.account?.rank?.tier).toBe(tierId);
 
         // 実装の tierToRank 関数と一致することを確認
-        const expectedRankName = riotApiFixtures.getTierName(tierId);
+        const _expectedRankName = riotApiFixtures.getTierName(tierId);
         const actualRank = result.account?.rank?.rank ?? "";
 
         // OpenAPIのtier名と実装のtier名のマッピングを確認

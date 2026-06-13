@@ -2,6 +2,11 @@
 # Get these from: https://discord.com/developers/applications
 DISCORD_PUBLIC_KEY=your_discord_public_key_here
 DISCORD_BOT_TOKEN=your_discord_bot_token_here
+DISCORD_APPLICATION_ID=your_discord_application_id_here
+
+# Optional: register slash commands to a single test guild for instant updates
+# (omit to register globally, which can take up to 1 hour to propagate)
+# DISCORD_TEST_GUILD_ID=your_test_guild_id_here
 
 # HenrikDev API for VALORANT rank data
 # Get your API key from: https://valorant-api.com/
