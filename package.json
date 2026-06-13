@@ -1,0 +1,44 @@
+{
+  "name": "discord-schedule-matching-bot",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "bun vitest",
+    "test:ui": "bun vitest --ui",
+    "lint": "oxlint src/ tests/ scripts/",
+    "lint:fix": "oxlint src/ tests/ scripts/ --fix",
+    "format": "oxfmt src/ tests/ scripts/",
+    "format:check": "oxfmt --check src/ tests/ scripts/",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun vitest --run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "secrets:setup": "cp .dev.vars.example .dev.vars && echo '✅ .dev.vars created. Please edit with your secrets.'",
+    "secrets:staging:list": "wrangler secret list --env staging",
+    "secrets:staging:put": "wrangler secret put DISCORD_PUBLIC_KEY --env staging && wrangler secret put DISCORD_BOT_TOKEN --env staging && wrangler secret put DISCORD_APPLICATION_ID --env staging && wrangler secret put HENRIKDEV_API_KEY --env staging",
+    "secrets:prod:list": "wrangler secret list --env production",
+    "secrets:prod:put": "wrangler secret put DISCORD_PUBLIC_KEY --env production && wrangler secret put DISCORD_BOT_TOKEN --env production && wrangler secret put DISCORD_APPLICATION_ID --env production && wrangler secret put HENRIKDEV_API_KEY --env production"
+  },
+  "dependencies": {
+    "discord-api-types": "^0.38.48",
+    "discord-interactions": "^4.4.0",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.12.25",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.12.4",
+    "@cloudflare/workers-types": "^4.20260116.0",
+    "@vitest/ui": "^3.2.4",
+    "drizzle-kit": "^0.30.1",
+    "openapi-typescript": "^7.10.1",
+    "oxfmt": "^0.54.0",
+    "oxlint": "^1.69.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.59.1"
+  },
+  "type": "module"
+}
