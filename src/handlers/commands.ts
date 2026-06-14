@@ -14,7 +14,12 @@ import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import { deleteDiscordMessage, editOriginalInteractionResponse } from "../features/discord";
-import { buildRiotAddOutcome, fetchValorantRankWithCache } from "../features/riot";
+import {
+  buildRefreshSummary,
+  buildRiotAddOutcome,
+  fetchValorantRankWithCache,
+  refreshUserRanks,
+} from "../features/riot";
 import { canManageSchedule } from "../shared/discord/permissions";
 import type { Env, WaitUntilContext } from "../lib/types";
 import * as v from "../shared/validation";
@@ -77,6 +82,9 @@ const RIOT_HELP = [
   "▸ **/riot list** — 登録済みのVALORANTアカウントを一覧表示します",
   "　引数はありません。",
   "",
+  "▸ **/riot refresh** — 登録済みのVALORANTアカウントのランクを再取得します",
+  "　引数はありません。最新のランクを Riot から取り直します（キャッシュは無視します）。",
+  "",
   "▸ **/riot help** — このヘルプを表示します",
 ].join("\n");
 
@@ -123,6 +131,7 @@ export const handleCommandInteraction = async (
     if (sub?.name === "add") return handleRiotAccountAdd(interaction, sub.options, env, ctx);
     if (sub?.name === "remove") return handleRiotAccountRemove(interaction, sub.options, env);
     if (sub?.name === "list") return handleRiotAccountList(interaction, env);
+    if (sub?.name === "refresh") return handleRiotAccountRefresh(interaction, env, ctx);
   }
 
   return ephemeral("エラー: 不明なコマンドです");
@@ -488,6 +497,50 @@ const handleRiotAccountList = async (
     .join("\n");
 
   return ephemeral(`登録されているアカウント:\n${accountList}`);
+};
+
+const handleRiotAccountRefresh = async (
+  interaction: APIApplicationCommandInteraction,
+  env: Env,
+  ctx: WaitUntilContext,
+): Promise<APIInteractionResponse> => {
+  const userId = getUserId(interaction);
+
+  if (!userId) {
+    return ephemeral("エラー: user情報が不足しています");
+  }
+
+  // 全アカウントの実 API 再取得は3秒を超え得るため deferred 化し、結果は @original で反映
+  ctx.waitUntil(
+    (async () => {
+      const content = await (async () => {
+        try {
+          const db = drizzle(env.DB, { schema });
+          // cacheDurationMs: 0 でキャッシュを強制バイパスし、最新ランクを取り直す
+          const results = await refreshUserRanks(userId, db, env.HENRIKDEV_API_KEY, {
+            cacheDurationMs: 0,
+          });
+          if (results.length === 0) {
+            return "登録されているアカウントはありません";
+          }
+          return buildRefreshSummary(results);
+        } catch (error) {
+          console.error("[RIOT_REFRESH] Failed:", error);
+          return "エラー: ランクの再取得中に問題が発生しました";
+        }
+      })();
+
+      try {
+        await editOriginalInteractionResponse(env.DISCORD_APPLICATION_ID, interaction.token, {
+          content,
+        });
+      } catch (error) {
+        console.error("[RIOT_REFRESH] Failed to edit original response:", error);
+      }
+    })(),
+  );
+
+  return deferredEphemeral();
 };
 
 /** DB に JSON 文字列で保存された rank から表示用ラベルを取り出す */

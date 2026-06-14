@@ -6,9 +6,35 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { buildRiotAddOutcome, fetchValorantRank } from "../../../../src/features/riot/api";
-import type { FetchRankResult } from "../../../../src/features/riot/api";
+import {
+  buildRiotAddOutcome,
+  fetchValorantRank,
+  fetchValorantRankWithRetry,
+} from "../../../../src/features/riot/api";
+import type { FetchRankResult, RetryDeps } from "../../../../src/features/riot/api";
 import { riotApiFixtures } from "../../../../src/fixtures/riot-api-responses";
+
+// リトライ層を実時間待ちなしで検証するための注入依存（sleep を no-op 化）。
+const noWaitDeps: RetryDeps = {
+  nowMs: () => 0,
+  sleep: () => Promise.resolve(),
+  rng: () => 0.5,
+};
+
+const rateLimitedResponse = (): Response =>
+  ({
+    ok: false,
+    status: 429,
+    headers: new Headers({ "x-ratelimit-remaining": "0" }),
+    text: () => Promise.resolve("Too Many Requests"),
+  }) as Response;
+
+const successResponse = (): Response =>
+  ({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve(riotApiFixtures.success[13]),
+  }) as Response;
 
 describe("fetchValorantRank", () => {
   beforeEach(() => {
@@ -309,11 +335,13 @@ describe("fetchValorantRank", () => {
       expect(result.error).toBe("API error: 408 Request Timeout");
     });
 
-    it("should handle 429 Rate Limit", async () => {
+    it("should map 429 to rate_limited with header info (personal limit)", async () => {
+      const headers = new Headers({ "retry-after": "30", "x-ratelimit-remaining": "0" });
       globalThis.fetch = vi.fn(() =>
         Promise.resolve({
           ok: false,
           status: 429,
+          headers,
           text: () => Promise.resolve(riotApiFixtures.errors.rateLimit.body),
         } as Response),
       );
@@ -322,7 +350,29 @@ describe("fetchValorantRank", () => {
 
       expect(result.success).toBe(false);
       expect(result.account).toBeNull();
-      expect(result.error).toBe("API error: 429 Too Many Requests");
+      expect(result.errorCode).toBe("rate_limited");
+      expect(result.retryable).toBe(true);
+      expect(result.retryAfterMs).toBe(30_000);
+      expect(result.rateLimitRemaining).toBe(0);
+      expect(result.rateLimitScope).toBe("personal");
+    });
+
+    it("should treat 429 with remaining>0 as global scope and tolerate missing headers", async () => {
+      const headers = new Headers({ "x-ratelimit-remaining": "5" });
+      globalThis.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 429,
+          headers,
+          text: () => Promise.resolve(riotApiFixtures.errors.rateLimit.body),
+        } as Response),
+      );
+
+      const result = await fetchValorantRank("name", "tag", "api-key");
+
+      expect(result.errorCode).toBe("rate_limited");
+      expect(result.rateLimitScope).toBe("global");
+      expect(result.retryAfterMs).toBeUndefined();
     });
 
     it("should handle 503 Service Unavailable", async () => {
@@ -339,6 +389,8 @@ describe("fetchValorantRank", () => {
       expect(result.success).toBe(false);
       expect(result.account).toBeNull();
       expect(result.error).toBe("API error: 503 Service Unavailable");
+      expect(result.errorCode).toBe("upstream");
+      expect(result.retryable).toBe(true); // 5xx は一時的としてリトライ対象
     });
   });
 
@@ -530,6 +582,54 @@ describe("fetchValorantRank", () => {
         },
       );
     });
+  });
+});
+
+describe("fetchValorantRankWithRetry", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("429 の後に成功すればリトライして成功を返す", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rateLimitedResponse())
+      .mockResolvedValueOnce(successResponse());
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchValorantRankWithRetry("name", "tag", "api-key", "ap", noWaitDeps);
+
+    expect(result.success).toBe(true);
+    expect(result.account?.rank?.rank).toBe("Gold 2");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("429 が続けば最大試行数(3)で打ち切り rate_limited を返す", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(rateLimitedResponse());
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchValorantRankWithRetry("name", "tag", "api-key", "ap", noWaitDeps);
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe("rate_limited");
+    // 初回 + リトライ2回 = 計3回
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("リトライ不可（404）は1回で返す", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      headers: new Headers(),
+      text: () => Promise.resolve("Not Found"),
+    } as Response);
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchValorantRankWithRetry("name", "tag", "api-key", "ap", noWaitDeps);
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe("upstream");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

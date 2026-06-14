@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import { editOriginalInteractionResponse } from "../features/discord";
 import { applyConsent, isRecruitActive } from "../features/recruit";
-import { fetchValorantRankWithCache } from "../features/riot";
+import { refreshUserRanks } from "../features/riot";
 import { buildTimeOptions } from "../shared/time";
 import type { Env, WaitUntilContext } from "../lib/types";
 import { finalizeSmallParty, recomputeMatch } from "./matching";
@@ -380,32 +380,17 @@ const updateAllUserRanks = async (
   db: DrizzleD1Database<typeof schema>,
   apiKey: string,
 ): Promise<RankUpdateResult> => {
-  const userAccounts = await db
-    .select()
-    .from(schema.riotAccounts)
-    .where(eq(schema.riotAccounts.userId, userId))
-    .all();
+  // 参加時の再取得は短いキャッシュ（5分）越えのみ実 API を叩く（isJoining: true）。
+  const results = await refreshUserRanks(userId, db, apiKey, { isJoining: true });
 
-  if (userAccounts.length === 0) {
-    return { success: true, accountCount: 0, failedCount: 0 };
-  }
+  const accountCount = results.length;
+  const failedCount = results.filter((r) => !r.result.success).length;
 
-  const results = await Promise.allSettled(
-    userAccounts.map((account) =>
-      fetchValorantRankWithCache(account.gameName, account.tagLine, userId, db, apiKey, {
-        isJoining: true,
-      }),
-    ),
-  );
-
-  const succeeded = results.filter((r) => r.status === "fulfilled" && r.value.success).length;
-  const failed = results.length - succeeded;
-
-  if (failed > 0) {
+  if (failedCount > 0) {
     console.warn(
-      `[RANK_UPDATE] ${failed}/${userAccounts.length} accounts failed to update for user ${userId}`,
+      `[RANK_UPDATE] ${failedCount}/${accountCount} accounts failed to update for user ${userId}`,
     );
   }
 
-  return { success: true, accountCount: userAccounts.length, failedCount: failed };
+  return { success: true, accountCount, failedCount };
 };

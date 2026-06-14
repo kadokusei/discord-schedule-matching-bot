@@ -1,9 +1,10 @@
 import { env } from "cloudflare:test";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../../src/db/schema";
 import { type ValorantRank, fetchValorantRankWithCache } from "../../../../src/features/riot";
+import { writeCooldownUntil } from "../../../../src/features/riot/cooldown";
 
 // Mock fetch for HenrikDev API
 const mockFetch = vi.fn();
@@ -56,8 +57,6 @@ describe("fetchValorantRankWithCache", () => {
       expect(result.success).toBe(true);
       expect(result.account?.rank).toEqual(mockRankData);
       expect(result.fromCache).toBe(false);
-      // rate limit 25/min: 25 - 0(count) - 1 - 1(api.ts での減算) = 23
-      expect(result.remainingRequests).toBe(23);
 
       // Verify database entry was created
       const accounts = await db.select().from(schema.riotAccounts).all();
@@ -190,10 +189,12 @@ describe("fetchValorantRankWithCache", () => {
         .set({ lastFetchedAtUtc: expiredUtc })
         .where(sql`1=1`);
 
+      // 404 はリトライ対象外。実時間待ちを避けつつフォールバック挙動を検証する。
       mockFetch.mockResolvedValueOnce({
         ok: false,
-        status: 500,
-        text: async () => "Internal Server Error",
+        status: 404,
+        headers: new Headers(),
+        text: async () => "Not Found",
       } as Response);
 
       const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
@@ -218,8 +219,8 @@ describe("fetchValorantRankWithCache", () => {
     });
   });
 
-  describe("rate limit handling", () => {
-    it("should fallback to cache when rate limited", async () => {
+  describe("cooldown handling", () => {
+    it("should not call the API and fallback to cache while in cooldown", async () => {
       // Create a cached entry
       const nowUtc = new Date().toISOString();
       await db.insert(schema.riotAccounts).values({
@@ -233,40 +234,57 @@ describe("fetchValorantRankWithCache", () => {
         lastFetchedAtUtc: nowUtc,
       });
 
-      // Expire the cache
+      // Expire the cache so the fetch path would normally run
       const expiredUtc = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
       await db
         .update(schema.riotAccounts)
         .set({ lastFetchedAtUtc: expiredUtc })
         .where(sql`1=1`);
 
-      // Fill rate limit (30 requests)
-      const { RateLimiter } = await import("../../../../src/features/riot");
-      const limiter = new RateLimiter(db);
-      for (let i = 0; i < 30; i++) {
-        await limiter.checkRateLimit();
-      }
+      // Seed an active cooldown (release time in the future)
+      await writeCooldownUntil(db, Date.now() + 60_000);
 
       const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(true);
       expect(result.account?.rank).toEqual(mockRankData);
       expect(result.fromCache).toBe(true);
+      // cooldown 中は実 API を叩かない
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it("should return rate limit error when rate limited and no cache", async () => {
-      // Fill rate limit (30 requests)
-      const { RateLimiter } = await import("../../../../src/features/riot");
-      const limiter = new RateLimiter(db);
-      for (let i = 0; i < 30; i++) {
-        await limiter.checkRateLimit();
-      }
+    it("should return rate_limited error while in cooldown and no cache exists", async () => {
+      await writeCooldownUntil(db, Date.now() + 60_000);
 
       const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
 
       expect(result.success).toBe(false);
-      expect(result.remainingRequests).toBe(0);
+      expect(result.errorCode).toBe("rate_limited");
       expect(result.error).toContain("Rate limit exceeded");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("should record a cooldown after retries are exhausted on 429", async () => {
+      // 429 を返し続ける。retry-after:0 で実時間待ちを避けつつリトライ→枯渇を再現する。
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({ "x-ratelimit-remaining": "0", "retry-after": "0" }),
+        text: async () => "Too Many Requests",
+      } as Response);
+
+      // キャッシュなし → リトライ枯渇で rate_limited を返し、cooldown を記録する
+      const result = await fetchValorantRankWithCache(gameName, tagLine, userId, db, apiKey);
+
+      expect(result.success).toBe(false);
+      expect(result.errorCode).toBe("rate_limited");
+
+      const cooldownRows = await db
+        .select()
+        .from(schema.apiRateLimits)
+        .where(eq(schema.apiRateLimits.apiName, "henrikdev_cooldown"))
+        .all();
+      expect(cooldownRows.length).toBe(1);
     });
   });
 
