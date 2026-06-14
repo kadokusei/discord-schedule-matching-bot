@@ -1,5 +1,31 @@
 import { describe, it, expect } from "vitest";
-import { buildTimeOptions, localDateTimeToUtc, type TimeOption } from "../../../../src/shared/time";
+import {
+  buildTimeOptions,
+  localDateTimeToUtc,
+  timeOptionCount,
+  type TimeOption,
+} from "../../../../src/shared/time";
+
+describe("timeOptionCount", () => {
+  it("returns 13 for 30min interval / 360min duration", () => {
+    expect(timeOptionCount(30, 360)).toBe(13);
+  });
+
+  it("returns 73 for 5min interval / 360min duration", () => {
+    expect(timeOptionCount(5, 360)).toBe(73);
+  });
+
+  it("returns 25 at the 60min interval / 1440min (24h) boundary", () => {
+    expect(timeOptionCount(60, 1440)).toBe(25);
+  });
+
+  it("floors non-divisible combinations to match buildTimeOptions length", () => {
+    expect(timeOptionCount(30, 350)).toBe(12);
+    expect(timeOptionCount(30, 350)).toBe(
+      buildTimeOptions("2026-01-16", "21:00", 30, 350, "UTC").length,
+    );
+  });
+});
 
 describe("buildTimeOptions", () => {
   it("should generate 13 options with HH:mm labels and ISO 8601 values", () => {

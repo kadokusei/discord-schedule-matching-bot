@@ -112,6 +112,81 @@ describe("Command Handlers - Integration Tests", () => {
 
       expect((response as { data?: { content?: string } }).data?.content).toContain("エラー");
     });
+
+    it("should reject options that exceed the 25-option time menu limit", async () => {
+      // interval 5分 / duration 360分 → 73個 > 25
+      const response = await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "create",
+          [
+            { name: "post_time", value: "20:00" },
+            { name: "interval", value: 5, type: 4 },
+            { name: "duration", value: 360, type: 4 },
+          ],
+          { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
+        ),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("25");
+      const schedules = await db.select().from(schema.schedules).all();
+      expect(schedules).toHaveLength(0);
+    });
+
+    it("should reject when default fallback exceeds the limit even if only one option is given", async () => {
+      // interval 5分 のみ指定、duration はデフォルト 360分 → 73個 > 25
+      const response = await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "create",
+          [
+            { name: "post_time", value: "20:00" },
+            { name: "interval", value: 5, type: 4 },
+          ],
+          { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
+        ),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("25");
+      expect(await db.select().from(schema.schedules).all()).toHaveLength(0);
+    });
+
+    it("should create at the 25-option boundary (23h / 60min + 未定 = 25)", async () => {
+      // interval 60分 / duration 1380分 → 24スロット + 「未定」= 25個 (境界, 許可)
+      await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "create",
+          [
+            { name: "post_time", value: "20:00" },
+            { name: "interval", value: 60, type: 4 },
+            { name: "duration", value: 1380, type: 4 },
+          ],
+          { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
+        ),
+      );
+
+      expect(await db.select().from(schema.schedules).all()).toHaveLength(1);
+    });
+
+    it("should reject just over the boundary (24h / 60min + 未定 = 26)", async () => {
+      // interval 60分 / duration 1440分 → 25スロット + 「未定」= 26個 > 25 (拒否)
+      const response = await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "create",
+          [
+            { name: "post_time", value: "20:00" },
+            { name: "interval", value: 60, type: 4 },
+            { name: "duration", value: 1440, type: 4 },
+          ],
+          { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
+        ),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("25");
+      expect(await db.select().from(schema.schedules).all()).toHaveLength(0);
+    });
   });
 
   describe("/schedule settings", () => {
