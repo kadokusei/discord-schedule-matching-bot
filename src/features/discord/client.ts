@@ -7,6 +7,12 @@ import type {
 } from "discord-api-types/v10";
 import { ButtonStyle, ComponentType } from "discord-api-types/v10";
 import type { Env } from "../../lib/types";
+import {
+  MAX_TIME_OPTIONS,
+  type TimeOption,
+  UNDECIDED_VALUE,
+  buildTimeOptions,
+} from "../../shared/time";
 import { buildRecruitEmbed } from "./embed";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -110,20 +116,45 @@ export async function updateDiscordMessage(
   }
 }
 
-/** 募集メッセージに付与する公開ボタン（参加 / キャンセル）。削除は /schedule delete に一本化。 */
+/**
+ * 募集メッセージに付与する公開コンポーネント。
+ * 1行目: 希望時間を選ぶ StringSelect（選択＝参加・更新）。末尾に「未定」を含む。2行目: キャンセルボタン。
+ * 削除は /schedule delete に一本化。
+ */
 export function buildRecruitComponents(
   recruitId: string,
+  timeOptions: TimeOption[],
 ): APIActionRowComponent<APIComponentInMessageActionRow>[] {
+  // セレクトの選択肢は時間スロット + 「未定」1件で、合計が Discord 上限(25)を超えないようにする。
+  // 上限超過は作成時バリデーションで弾くが、旧データ保険としてここでも時間スロットを切り詰める。
+  const maxSlots = MAX_TIME_OPTIONS - 1;
+  if (timeOptions.length > maxSlots) {
+    console.warn(
+      `[DISCORD] recruit ${recruitId} has ${timeOptions.length} time options, truncating to ${maxSlots}`,
+    );
+  }
+  const slotOptions = timeOptions.slice(0, maxSlots).map((opt) => ({
+    label: opt.label,
+    value: opt.value,
+  }));
+
   return [
     {
       type: ComponentType.ActionRow,
       components: [
         {
-          type: ComponentType.Button,
-          style: ButtonStyle.Primary,
-          label: "参加",
-          custom_id: `recruit:join:${recruitId}`,
+          type: ComponentType.StringSelect,
+          custom_id: `recruit:time:${recruitId}`,
+          placeholder: "希望時間を選択",
+          options: [...slotOptions, { label: "未定", value: UNDECIDED_VALUE }],
+          min_values: 1,
+          max_values: 1,
         },
+      ],
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
@@ -194,6 +225,9 @@ export async function postRecruitMessage(
     targetDateLocal: string;
     postTimeHHmm: string;
     template: string;
+    intervalMin: number;
+    durationMin: number;
+    timezone: string;
   },
 ): Promise<string> {
   const embedData = buildRecruitEmbed({
@@ -204,10 +238,18 @@ export async function postRecruitMessage(
     pendingCount: 0,
   });
 
+  const timeOptions = buildTimeOptions(
+    params.targetDateLocal,
+    params.postTimeHHmm,
+    params.intervalMin,
+    params.durationMin,
+    params.timezone,
+  );
+
   const payload = {
     content: params.template || `【募集】${params.targetDateLocal} ${params.postTimeHHmm}`,
     embeds: embedData.embeds,
-    components: buildRecruitComponents(params.recruitId),
+    components: buildRecruitComponents(params.recruitId, timeOptions),
     allowed_mentions: NO_MENTIONS,
   };
 

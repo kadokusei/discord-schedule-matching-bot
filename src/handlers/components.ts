@@ -11,7 +11,7 @@ import * as schema from "../db/schema";
 import { editOriginalInteractionResponse } from "../features/discord";
 import { applyConsent, isRecruitActive } from "../features/recruit";
 import { refreshUserRanks } from "../features/riot";
-import { buildTimeOptions } from "../shared/time";
+import { UNDECIDED_VALUE } from "../shared/time";
 import type { Env, WaitUntilContext } from "../lib/types";
 import { finalizeSmallParty, recomputeMatch } from "./matching";
 
@@ -34,9 +34,6 @@ const deferredEphemeral = (): APIInteractionResponse => ({
 
 /** 終端状態の募集に対する操作を弾くときの定型メッセージ。 */
 const RECRUIT_CLOSED_MESSAGE = "この募集は終了しているため、操作できません。";
-
-/** 時間選択セレクトで「未定」を表す value。時間スロット(ISO8601)と区別する固定値。 */
-const UNDECIDED_VALUE = "undecided";
 
 /** @original を編集して結果を本人に反映。失敗時はログのみ。 */
 const respond = async (
@@ -63,9 +60,6 @@ export const handleComponentInteraction = (
     (async () => {
       try {
         switch (action) {
-          case "join":
-            await handleRecruitJoin(interaction, recruitId, env);
-            break;
           case "time":
             await handleRecruitTime(interaction, recruitId, env);
             break;
@@ -88,110 +82,6 @@ export const handleComponentInteraction = (
   );
 
   return deferredEphemeral();
-};
-
-const handleRecruitJoin = async (
-  interaction: APIMessageComponentInteraction,
-  recruitId: string,
-  env: Env,
-): Promise<void> => {
-  const userId = getUserId(interaction);
-
-  if (!recruitId || !userId) {
-    await respond(env, interaction, { content: "エラー: 必要な情報が不足しています" });
-    return;
-  }
-
-  const db = drizzle(env.DB, { schema });
-  const nowUtc = new Date().toISOString();
-
-  const recruit = await db
-    .select()
-    .from(schema.recruits)
-    .where(eq(schema.recruits.id, recruitId))
-    .get();
-
-  if (!recruit) {
-    await respond(env, interaction, { content: "エラー: 募集が見つかりません" });
-    return;
-  }
-
-  if (!isRecruitActive(recruit.status)) {
-    await respond(env, interaction, { content: RECRUIT_CLOSED_MESSAGE });
-    return;
-  }
-
-  const schedule = await db
-    .select()
-    .from(schema.schedules)
-    .where(eq(schema.schedules.id, recruit.scheduleId))
-    .get();
-
-  const settings = await db
-    .select()
-    .from(schema.guildSettings)
-    .where(eq(schema.guildSettings.guildId, recruit.guildId))
-    .get();
-
-  const intervalMin = schedule?.intervalMin ?? settings?.defaultIntervalMin ?? 30;
-  const durationMin = schedule?.durationMin ?? settings?.defaultDurationMin ?? 360;
-  const timezone = settings?.timezone ?? "Asia/Tokyo";
-
-  const timeOptions = buildTimeOptions(
-    recruit.targetDateLocal,
-    schedule?.postTimeHHmm ?? "20:00",
-    intervalMin,
-    durationMin,
-    timezone,
-  );
-
-  await db
-    .insert(schema.recruitEntries)
-    .values({
-      recruitId,
-      userId,
-      state: "pending_time",
-      createdAtUtc: nowUtc,
-      updatedAtUtc: nowUtc,
-    })
-    .onConflictDoUpdate({
-      target: [schema.recruitEntries.recruitId, schema.recruitEntries.userId],
-      set: {
-        state: "pending_time",
-        availableFromUtc: null,
-        createdAtUtc: nowUtc,
-        updatedAtUtc: nowUtc,
-      },
-    });
-
-  // 公開募集メッセージの Embed を更新（参加状況の反映は recomputeMatch に一本化）
-  await recomputeMatch(env, recruitId, userId);
-
-  // 本人にだけ時間選択セレクトを ephemeral で提示
-  await respond(env, interaction, {
-    content: "参加登録しました。希望時間を選んでください。",
-    components: [
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.StringSelect,
-            custom_id: `recruit:time:${recruitId}`,
-            placeholder: "希望時間を選択",
-            options: [
-              ...timeOptions.map((opt) => ({ label: opt.label, value: opt.value })),
-              { label: "未定", value: UNDECIDED_VALUE },
-            ],
-            min_values: 1,
-            max_values: 1,
-          },
-        ],
-      },
-    ],
-  });
-
-  // ランク再取得はベストエフォート（失敗してもマッチングは継続）
-  await updateAllUserRanks(userId, db, env.HENRIKDEV_API_KEY);
 };
 
 const handleRecruitTime = async (
@@ -293,6 +183,9 @@ const handleRecruitTime = async (
     content: `希望時間を登録しました: ${localTime}`,
     components: [],
   });
+
+  // ランク再取得はベストエフォート（失敗してもマッチングは継続）
+  await updateAllUserRanks(userId, db, env.HENRIKDEV_API_KEY);
 };
 
 const handleRecruitCancel = async (

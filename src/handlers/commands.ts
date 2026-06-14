@@ -21,6 +21,7 @@ import {
   refreshUserRanks,
 } from "../features/riot";
 import { canManageSchedule } from "../shared/discord/permissions";
+import { MAX_TIME_OPTIONS, timeOptionCount } from "../shared/time";
 import type { Env, WaitUntilContext } from "../lib/types";
 import * as v from "../shared/validation";
 
@@ -206,6 +207,15 @@ const handleScheduleCreate = async (
   const resolvedInterval = interval ?? settings?.defaultIntervalMin ?? 30;
   const resolvedDuration = duration ?? settings?.defaultDurationMin ?? 360;
   const resolvedTemplate = settings?.defaultTemplate ?? "";
+
+  // 時間選択メニュー（StringSelect）は時間スロット + 「未定」1件で構成され、合計は Discord 上限(25)以内に収める。
+  // 時間スロット数が 24 を超える設定は作成させない。
+  const menuOptionCount = timeOptionCount(resolvedInterval, resolvedDuration) + 1;
+  if (menuOptionCount > MAX_TIME_OPTIONS) {
+    return ephemeral(
+      `エラー: 時間の選択肢が多すぎます（間隔 ${resolvedInterval}分 / 期間 ${resolvedDuration}分 → 「未定」を含め ${menuOptionCount}個）。選択肢は「未定」を含め ${MAX_TIME_OPTIONS}個までです。間隔を広げるか期間を短くしてください。`,
+    );
+  }
 
   await db.insert(schema.schedules).values({
     id: scheduleId,

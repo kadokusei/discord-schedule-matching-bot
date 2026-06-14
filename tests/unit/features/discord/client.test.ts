@@ -333,6 +333,9 @@ describe("Discord API Client", () => {
         targetDateLocal: "2026-01-18",
         postTimeHHmm: "20:00",
         template: "Custom template",
+        intervalMin: 30,
+        durationMin: 360,
+        timezone: "Asia/Tokyo",
       });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -357,6 +360,9 @@ describe("Discord API Client", () => {
         targetDateLocal: "2026-01-18",
         postTimeHHmm: "20:00",
         template: "",
+        intervalMin: 30,
+        durationMin: 360,
+        timezone: "Asia/Tokyo",
       });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -364,7 +370,7 @@ describe("Discord API Client", () => {
       expect(callArgs.content).toBe("【募集】2026-01-18 20:00");
     });
 
-    it("should include components with join and cancel buttons (no delete button)", async () => {
+    it("should include a time select menu and a cancel button (no join/delete button)", async () => {
       const mockFetch = vi.fn(() =>
         Promise.resolve({
           ok: true,
@@ -381,20 +387,33 @@ describe("Discord API Client", () => {
         targetDateLocal: "2026-01-18",
         postTimeHHmm: "20:00",
         template: "",
+        intervalMin: 30,
+        durationMin: 360,
+        timezone: "Asia/Tokyo",
       });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const callArgs = JSON.parse(getRequestBody(mockFetch));
       expect(callArgs.components).toBeDefined();
-      expect(callArgs.components).toHaveLength(1);
-      // 削除ボタンは撤去され、参加・キャンセルの2ボタンのみ
-      expect(callArgs.components[0].components).toHaveLength(2);
-      expect(callArgs.components[0].components[0].custom_id).toContain("recruit:join:");
-      expect(callArgs.components[0].components[1].custom_id).toContain("recruit:cancel:");
-      const customIds = callArgs.components[0].components.map(
-        (c: { custom_id: string }) => c.custom_id,
+      // 1行目: 時間選択メニュー / 2行目: キャンセルボタン
+      expect(callArgs.components).toHaveLength(2);
+
+      const select = callArgs.components[0].components[0];
+      // StringSelect (ComponentType.StringSelect = 3)
+      expect(select.type).toBe(3);
+      expect(select.custom_id).toContain("recruit:time:");
+      // 30分間隔 / 360分 → 13個の時間スロット + 「未定」= 14個
+      expect(select.options).toHaveLength(14);
+      expect(select.options[13]).toEqual({ label: "未定", value: "undecided" });
+
+      const cancelButton = callArgs.components[1].components[0];
+      expect(cancelButton.custom_id).toContain("recruit:cancel:");
+
+      const allCustomIds = callArgs.components.flatMap(
+        (row: { components: { custom_id: string }[] }) => row.components.map((c) => c.custom_id),
       );
-      expect(customIds.some((id: string) => id.includes("recruit:delete:"))).toBe(false);
+      expect(allCustomIds.some((id: string) => id.includes("recruit:join:"))).toBe(false);
+      expect(allCustomIds.some((id: string) => id.includes("recruit:delete:"))).toBe(false);
     });
 
     it("should return message ID", async () => {
@@ -414,6 +433,9 @@ describe("Discord API Client", () => {
         targetDateLocal: "2026-01-18",
         postTimeHHmm: "20:00",
         template: "",
+        intervalMin: 30,
+        durationMin: 360,
+        timezone: "Asia/Tokyo",
       });
 
       expect(messageId).toBe("msg-returned-id");

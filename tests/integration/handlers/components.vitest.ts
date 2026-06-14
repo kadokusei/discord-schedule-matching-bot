@@ -313,25 +313,69 @@ describe("Component guards against closed recruits", () => {
     vi.clearAllMocks();
   });
 
-  it("rejects join on a closed recruit and does not create an entry", async () => {
-    const calls = captureFetch();
-    await insertClosedRecruit("rec-closed", "closed");
+  const timeSelectPayload = (
+    customId: string,
+    value: string,
+    userId = "clicker",
+  ): APIMessageComponentInteraction =>
+    ({
+      type: 3,
+      id: "i",
+      application_id: "test-app-id",
+      token: "tok",
+      member: { user: { id: userId } },
+      data: { custom_id: customId, component_type: 3, values: [value] },
+    }) as unknown as APIMessageComponentInteraction;
 
-    const response = await runComponent(componentPayload("recruit:join:rec-closed"));
+  it("creates a confirmed entry directly on time selection (no prior join)", async () => {
+    const calls = captureFetch();
+    await insertClosedRecruit("rec-open", "open");
+
+    const response = await runComponent(
+      timeSelectPayload("recruit:time:rec-open", "2026-06-15T11:00:00.000Z"),
+    );
     // 即時応答は ephemeral deferred
     expect((response as { type: number }).type).toBe(5);
 
-    // @original 編集で「終了」を伝える
-    const original = calls.find((c) => c.url.includes("/messages/@original"));
-    expect((original?.body as { content?: string })?.content).toContain("終了");
-
-    // エントリは作られない
+    // 事前 join なしで confirmed エントリが直接作られる
     const entries = await db
       .select()
       .from(schema.recruitEntries)
-      .where(eq(schema.recruitEntries.recruitId, "rec-closed"))
+      .where(
+        and(
+          eq(schema.recruitEntries.recruitId, "rec-open"),
+          eq(schema.recruitEntries.userId, "clicker"),
+        ),
+      )
       .all();
-    expect(entries).toHaveLength(0);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.state).toBe("confirmed");
+    expect(entries[0]?.availableFromUtc).toBe("2026-06-15T11:00:00.000Z");
+
+    // @original 編集で登録完了を本人に通知
+    const original = calls.find((c) => c.url.includes("/messages/@original"));
+    expect((original?.body as { content?: string })?.content).toContain("希望時間を登録しました");
+  });
+
+  it("updates the time on re-selection", async () => {
+    captureFetch();
+    await insertClosedRecruit("rec-open2", "open");
+
+    await runComponent(timeSelectPayload("recruit:time:rec-open2", "2026-06-15T11:00:00.000Z"));
+    await runComponent(timeSelectPayload("recruit:time:rec-open2", "2026-06-15T12:00:00.000Z"));
+
+    const entries = await db
+      .select()
+      .from(schema.recruitEntries)
+      .where(
+        and(
+          eq(schema.recruitEntries.recruitId, "rec-open2"),
+          eq(schema.recruitEntries.userId, "clicker"),
+        ),
+      )
+      .all();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.availableFromUtc).toBe("2026-06-15T12:00:00.000Z");
   });
 
   it("rejects time selection on a cancelled recruit", async () => {

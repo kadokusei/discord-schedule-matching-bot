@@ -216,6 +216,9 @@ export async function handleScheduled(env: Env): Promise<void> {
         targetDateLocal,
         postTimeHHmm: schedule.postTimeHHmm,
         template: schedule.template,
+        intervalMin: schedule.intervalMin,
+        durationMin: schedule.durationMin,
+        timezone: tz,
       });
 
       await db.update(recruits).set({ messageId }).where(eq(recruits.id, recruitId));

@@ -25,11 +25,13 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
             type: ApplicationCommandOptionType.Integer,
             name: "interval",
             description: "間隔（分）",
+            min_value: 1,
           },
           {
             type: ApplicationCommandOptionType.Integer,
             name: "duration",
             description: "募集期間（分）",
+            min_value: 1,
           },
         ],
       },

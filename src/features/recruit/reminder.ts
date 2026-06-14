@@ -62,7 +62,7 @@ export function reminderSlotToSend(
 }
 
 export function buildReminderMessage(_recruitId: string): string {
-  return "希望時間の登録がまだです！\n参加ボタンを押した後、セレクトメニューから希望時間を選択してください。";
+  return "希望時間の登録がまだです！\n募集メッセージのセレクトメニューから希望時間を選択してください。";
 }
 
 /**
