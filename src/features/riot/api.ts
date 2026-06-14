@@ -1,7 +1,14 @@
 import { and, eq } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "../../db/schema";
-import { RateLimiter } from "./rate-limiter";
+import {
+  RETRY_TIME_BUDGET_MS,
+  computeCooldownUntil,
+  isCooldownExpired,
+  nextBackoffMs,
+  parseRetryAfter,
+} from "./backoff";
+import { readCooldownUntilMs, writeCooldownUntil } from "./cooldown";
 
 // キャッシュ期間の定数
 const CACHE_DURATION_MS_NORMAL = 24 * 60 * 60 * 1000; // 24時間
@@ -30,6 +37,14 @@ export interface FetchRankResult {
   errorCode?: FetchRankErrorCode;
   fromCache?: boolean;
   remainingRequests?: number;
+  /** リトライ対象の一時的失敗（429 / 5xx）か。それ以外（4xx 等）は false。 */
+  retryable?: boolean;
+  /** 429 時の Retry-After 由来の待機指示(ms)。ヘッダがなければ undefined。 */
+  retryAfterMs?: number;
+  /** 429 時の x-ratelimit-remaining。ヘッダがなければ undefined。 */
+  rateLimitRemaining?: number;
+  /** 429 のスコープ。remaining===0 は personal（共有鍵の枯渇）、それ以外は global。 */
+  rateLimitScope?: "personal" | "global";
 }
 
 export interface FetchRankWithCacheOptions {
@@ -60,11 +75,40 @@ export async function fetchValorantRank(
 
     if (!response.ok) {
       const text = await response.text();
+
+      // 429 はレートリミット超過。リトライ・cooldown 判断のためヘッダを構造化して返す。
+      if (response.status === 429) {
+        const nowMs = Date.now();
+        const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"), nowMs);
+        const remainingHeader = response.headers.get("x-ratelimit-remaining");
+        const rateLimitRemaining = remainingHeader !== null ? Number(remainingHeader) : undefined;
+        // remaining===0 は personal limit（共有鍵の枠を使い切った）、それ以外は global limit。
+        const rateLimitScope = rateLimitRemaining === 0 ? "personal" : "global";
+        console.warn("[RIOT_API] 429 rate limited", {
+          scope: rateLimitScope,
+          retryAfterMs,
+          remaining: rateLimitRemaining,
+          body: text,
+        });
+        return {
+          success: false,
+          account: null,
+          error: `API error: 429 ${text}`,
+          errorCode: "rate_limited",
+          retryable: true,
+          retryAfterMs,
+          rateLimitRemaining,
+          rateLimitScope,
+        };
+      }
+
       return {
         success: false,
         account: null,
         error: `API error: ${response.status} ${text}`,
         errorCode: "upstream",
+        // 5xx は一時的とみなしリトライ対象。4xx はリトライしない。
+        retryable: response.status >= 500,
       };
     }
 
@@ -205,6 +249,58 @@ export const rankStringFromStored = (rankJson: string | null): string | null => 
   return parsed?.rank ?? null;
 };
 
+/** 保存済みアカウント行から「キャッシュ返却」用の結果を組み立てる。 */
+const toCachedResult = (account: typeof schema.riotAccounts.$inferSelect): FetchRankResult => ({
+  success: true,
+  account: {
+    name: account.gameName,
+    tag: account.tagLine,
+    rank: parseRankSafely(account.rank),
+  },
+  error: null,
+  fromCache: true,
+});
+
+/** リトライ層に注入する依存。テストでは sleep を no-op 化し、時刻・乱数を固定する。 */
+export interface RetryDeps {
+  nowMs: () => number;
+  sleep: (ms: number) => Promise<void>;
+  rng: () => number;
+}
+
+const defaultRetryDeps: RetryDeps = {
+  nowMs: () => Date.now(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  rng: () => Math.random(),
+};
+
+/**
+ * fetchValorantRank をラップし、429 / 5xx を総待機予算内で限定リトライする。
+ * 予算超過・最大回数到達で打ち切り、最後の結果を返す（リトライ無限積み上げを防ぐ）。
+ */
+export const fetchValorantRankWithRetry = async (
+  gameName: string,
+  tagLine: string,
+  apiKey: string,
+  region: string,
+  deps: RetryDeps = defaultRetryDeps,
+): Promise<FetchRankResult> => {
+  const startMs = deps.nowMs();
+  let result = await fetchValorantRank(gameName, tagLine, apiKey, region);
+  let attempt = 0;
+
+  while (result.retryable === true) {
+    const budgetRemaining = RETRY_TIME_BUDGET_MS - (deps.nowMs() - startMs);
+    const delay = nextBackoffMs(attempt, result.retryAfterMs, budgetRemaining, deps.rng);
+    if (delay === null) break;
+    await deps.sleep(delay);
+    attempt += 1;
+    result = await fetchValorantRank(gameName, tagLine, apiKey, region);
+  }
+
+  return result;
+};
+
 export async function fetchValorantRankWithCache(
   gameName: string,
   tagLine: string,
@@ -238,75 +334,47 @@ export async function fetchValorantRankWithCache(
     const lastFetchedTime = new Date(existingAccount.lastFetchedAtUtc).getTime();
     if (lastFetchedTime > cacheExpiryUtc) {
       // キャッシュが有効
-      const rank = parseRankSafely(existingAccount.rank);
-      return {
-        success: true,
-        account: {
-          name: existingAccount.gameName,
-          tag: existingAccount.tagLine,
-          rank,
-        },
-        error: null,
-        fromCache: true,
-      };
+      return toCachedResult(existingAccount);
     }
   }
 
   // リージョンの決定: 明示指定 > 既存アカウントの保存値 > デフォルト "ap"
   const region = explicitRegion ?? existingAccount?.region ?? "ap";
 
-  // レートリミットチェック
-  const rateLimiter = new RateLimiter(db);
-  const rateLimitResult = await rateLimiter.checkRateLimit();
-
-  if (!rateLimitResult.allowed) {
-    // レートリミット到達時：古いキャッシュがあればそれを返す
+  // cooldown 中は実 API を叩かず即フォールバック（429 継続時のリトライ積み上げを防ぐ）
+  const cooldownUntilMs = await readCooldownUntilMs(db);
+  if (!isCooldownExpired(cooldownUntilMs, nowUtc)) {
     if (existingAccount) {
-      const rank = parseRankSafely(existingAccount.rank);
-      return {
-        success: true,
-        account: {
-          name: existingAccount.gameName,
-          tag: existingAccount.tagLine,
-          rank,
-        },
-        error: null,
-        fromCache: true,
-      };
+      return toCachedResult(existingAccount);
     }
-    // キャッシュもない場合はエラー
+    const waitSec = Math.ceil(Math.max(0, (cooldownUntilMs ?? nowUtc) - nowUtc) / 1000);
     return {
       success: false,
       account: null,
-      error: `Rate limit exceeded. Please wait ${Math.ceil((rateLimitResult.waitTimeMs ?? 0) / 1000)} seconds.`,
+      error: `Rate limit exceeded. Please wait ${waitSec} seconds.`,
       errorCode: "rate_limited",
-      remainingRequests: 0,
     };
   }
 
-  // API呼び出し
-  const apiResult = await fetchValorantRank(gameName, tagLine, apiKey, region);
+  // API呼び出し（429 / 5xx は総待機予算内で限定リトライ）
+  const apiResult = await fetchValorantRankWithRetry(gameName, tagLine, apiKey, region);
 
   if (!apiResult.success || !apiResult.account) {
+    // 429 でリトライ枯渇した場合は cooldown を記録し、以降の呼び出しを即フォールバックさせる
+    if (apiResult.errorCode === "rate_limited") {
+      const untilMs = computeCooldownUntil(
+        apiResult.rateLimitScope,
+        apiResult.retryAfterMs,
+        nowUtc,
+      );
+      await writeCooldownUntil(db, untilMs);
+    }
     // API失敗時：古いキャッシュがあればそれを返す
     if (existingAccount) {
-      const rank = parseRankSafely(existingAccount.rank);
-      return {
-        success: true,
-        account: {
-          name: existingAccount.gameName,
-          tag: existingAccount.tagLine,
-          rank,
-        },
-        error: null,
-        fromCache: true,
-      };
+      return toCachedResult(existingAccount);
     }
     // キャッシュもない場合はAPIエラーを返す
-    return {
-      ...apiResult,
-      remainingRequests: rateLimitResult.remainingRequests,
-    };
+    return apiResult;
   }
 
   // API成功時：アカウント情報を更新
@@ -343,6 +411,5 @@ export async function fetchValorantRankWithCache(
     account: apiResult.account,
     error: null,
     fromCache: false,
-    remainingRequests: rateLimitResult.remainingRequests - 1,
   };
 }

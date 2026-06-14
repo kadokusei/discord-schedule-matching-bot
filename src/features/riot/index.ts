@@ -2,12 +2,13 @@ export {
   buildRiotAddOutcome,
   fetchValorantRank,
   fetchValorantRankWithCache,
+  fetchValorantRankWithRetry,
   formatRankLabel,
   rankStringFromStored,
 } from "./api";
-export { RateLimiter } from "./rate-limiter";
 export type {
   FetchRankWithCacheOptions,
+  RetryDeps,
   ValorantAccount,
   FetchRankResult,
   ValorantRank,
