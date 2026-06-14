@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shouldSendReminder } from "../../../src/features/recruit";
+import { reminderSlotToSend } from "../../../src/features/recruit";
 
 describe("handleScheduled - Date formatting logic", () => {
   it("should format date correctly for Asia/Tokyo timezone", () => {
@@ -112,40 +112,33 @@ describe("handleScheduled - Schedule filtering", () => {
 });
 
 describe("handleScheduled - Reminder processing", () => {
-  it("should filter pending_time entries for reminders", () => {
+  it("should target only pending_time entries (confirmed/undecided/cancelled are excluded)", () => {
     const entries = [
-      { id: "1", state: "pending_time", lastRemindedAtUtc: null },
-      { id: "2", state: "confirmed", lastRemindedAtUtc: null },
-      {
-        id: "3",
-        state: "pending_time",
-        lastRemindedAtUtc: "2026-01-18T11:00:00.000Z",
-      },
-      { id: "4", state: "cancelled", lastRemindedAtUtc: null },
+      { id: "1", state: "pending_time" },
+      { id: "2", state: "confirmed" },
+      { id: "3", state: "pending_time" },
+      { id: "4", state: "undecided" },
+      { id: "5", state: "cancelled" },
     ];
 
     const pendingEntries = entries.filter((e) => e.state === "pending_time");
-    expect(pendingEntries).toHaveLength(2);
     expect(pendingEntries.map((e) => e.id)).toEqual(["1", "3"]);
   });
 
-  it("should calculate reminder eligibility based on interval", () => {
-    const entry1 = {
-      userId: "user-1",
-      recruitId: "recruit-1",
-      channelId: "channel-1",
-      lastRemindedAtUtc: null,
-    };
-    const entry2 = {
-      userId: "user-2",
-      recruitId: "recruit-2",
-      channelId: "channel-2",
-      lastRemindedAtUtc: "2026-01-18T11:00:00.000Z",
-    };
-    const nowUtc = new Date("2026-01-18T12:00:00.000Z");
-
-    expect(shouldSendReminder(entry1, 60, nowUtc)).toBe(true);
-    expect(shouldSendReminder(entry2, 60, nowUtc)).toBe(true);
-    expect(shouldSendReminder(entry2, 120, nowUtc)).toBe(false);
+  it("should resolve the reminder slot from the interval grid", () => {
+    // 20:00 開始 (11:00Z)・interval15・20:13 登録 → 20:15 をスキップして 20:30 (11:30Z) が初回
+    const slot = reminderSlotToSend(
+      {
+        targetDateLocal: "2026-01-17",
+        postTimeHHmm: "20:00",
+        intervalMin: 15,
+        durationMin: 360,
+        createdAtUtc: "2026-01-17T11:13:00.000Z",
+        lastRemindedAtUtc: null,
+      },
+      "Asia/Tokyo",
+      new Date("2026-01-17T11:30:00.000Z"),
+    );
+    expect(slot).toBe("2026-01-17T11:30:00.000Z");
   });
 });

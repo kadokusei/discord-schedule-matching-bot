@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { guildSettings, recruitEntries, recruits, riotAccounts, schedules } from "../db/schema";
 import {
@@ -9,6 +9,7 @@ import {
 import { type Entry, computeBestParty } from "../features/matching";
 import {
   type Match,
+  buildUndecidedNudge,
   diffMatch,
   formatNotification,
   isRecruitActive,
@@ -116,6 +117,8 @@ export async function recomputeMatch(
   // 参加状況を計算
   const confirmedCount = entries.filter((entry) => entry.state === "confirmed").length;
   const pendingCount = entries.filter((entry) => entry.state === "pending_time").length;
+  const undecidedEntries = entries.filter((entry) => entry.state === "undecided");
+  const undecidedCount = undecidedEntries.length;
 
   const confirmedUsers = entries
     .filter(
@@ -133,6 +136,38 @@ export async function recomputeMatch(
   const pendingUserIds = entries
     .filter((entry) => entry.state === "pending_time")
     .map((entry) => entry.userId);
+
+  const undecidedUserIds = undecidedEntries.map((entry) => entry.userId);
+
+  // 「未定」者への人数充足リマインド: 確定者＋未定者が少人数の下限(2)に達したら、
+  // 未送信(lastRemindedAtUtc === null)の未定者へ 1 回だけ時間確定を促す。
+  // ただし本人が自分のアクション（未定への変更など）でトリガした recompute では本人へ送らない。
+  // その後、別メンバーの動きで人数が揃った状態で recompute が走れば 1 回だけ送る。
+  if (confirmedCount + undecidedCount >= 2) {
+    for (const entry of undecidedEntries) {
+      if (entry.lastRemindedAtUtc !== null) continue;
+      if (entry.userId === triggeredBy) continue;
+      try {
+        await postChannelMessage(
+          env,
+          recruit.channelId,
+          `<@${entry.userId}> ${buildUndecidedNudge()}`,
+          { users: [entry.userId] },
+        );
+        await db
+          .update(recruitEntries)
+          .set({ lastRemindedAtUtc: new Date().toISOString() })
+          .where(
+            and(eq(recruitEntries.recruitId, recruitId), eq(recruitEntries.userId, entry.userId)),
+          );
+      } catch (error) {
+        console.error(
+          `[UNDECIDED_NUDGE] Failed to notify user ${entry.userId} in recruit ${recruitId}:`,
+          error,
+        );
+      }
+    }
+  }
 
   const previousMatch = buildMatchFromRecruit(recruit);
 
@@ -168,8 +203,10 @@ export async function recomputeMatch(
       status: "open",
       confirmedCount,
       pendingCount,
+      undecidedCount,
       confirmedUsers,
       pendingUserIds,
+      undecidedUserIds,
       timezone,
     });
 
@@ -207,8 +244,10 @@ export async function recomputeMatch(
     status: "matched",
     confirmedCount,
     pendingCount,
+    undecidedCount,
     confirmedUsers,
     pendingUserIds,
+    undecidedUserIds,
     matchedMembers: bestParty.memberIds,
     matchedTime: new Date(bestParty.meetTimeUtc).toLocaleTimeString("ja-JP", {
       timeZone: timezone,
@@ -306,6 +345,7 @@ export async function finalizeSmallParty(
 
   const confirmedCount = entries.filter((e) => e.state === "confirmed").length;
   const pendingCount = entries.filter((e) => e.state === "pending_time").length;
+  const undecidedCount = entries.filter((e) => e.state === "undecided").length;
   const confirmedUsers = entries
     .filter(
       (e): e is typeof e & { availableFromUtc: NonNullable<typeof e.availableFromUtc> } =>
@@ -313,6 +353,7 @@ export async function finalizeSmallParty(
     )
     .map((e) => ({ userId: e.userId, availableFromUtc: e.availableFromUtc }));
   const pendingUserIds = entries.filter((e) => e.state === "pending_time").map((e) => e.userId);
+  const undecidedUserIds = entries.filter((e) => e.state === "undecided").map((e) => e.userId);
 
   const previousMatch = buildMatchFromRecruit(recruit);
   const nextMatch = { memberIds, meetTimeUtc };
@@ -324,8 +365,10 @@ export async function finalizeSmallParty(
     status: "matched",
     confirmedCount,
     pendingCount,
+    undecidedCount,
     confirmedUsers,
     pendingUserIds,
+    undecidedUserIds,
     matchedMembers: memberIds,
     matchedTime: new Date(meetTimeUtc).toLocaleTimeString("ja-JP", {
       timeZone: timezone,

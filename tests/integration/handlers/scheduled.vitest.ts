@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as schema from "../../../src/db/schema";
 import {
   buildReminderMessage,
-  filterPendingReminders,
+  reminderSlotToSend,
   shouldCreateInstance,
 } from "../../../src/features/recruit";
 import { handleScheduled } from "../../../src/handlers/scheduled";
@@ -278,14 +278,21 @@ describe("handleScheduled - Integration Tests", () => {
   });
 
   describe("reminder handling", () => {
-    it("should only update lastRemindedAtUtc after successful message send", async () => {
+    // 募集開始 20:00 JST = 11:00Z、interval 15 分。20:13(11:13Z) 登録 → 20:15 をスキップし 20:30(11:30Z) が初回。
+    const SCHEDULE = {
+      targetDateLocal: "2026-01-17",
+      postTimeHHmm: "20:00",
+      intervalMin: 15,
+      durationMin: 360,
+    };
+
+    it("should update lastRemindedAtUtc with the slot time after successful message send", async () => {
       // Clean up
       await db.delete(schema.recruitEntries);
       await db.delete(schema.recruits);
       await db.delete(schema.schedules);
       await db.delete(schema.guildSettings);
 
-      // Setup guild settings with reminder interval
       await db.insert(schema.guildSettings).values({
         id: crypto.randomUUID(),
         guildId: "test-guild",
@@ -293,10 +300,8 @@ describe("handleScheduled - Integration Tests", () => {
         defaultIntervalMin: 30,
         defaultDurationMin: 360,
         defaultTemplate: "",
-        reminderIntervalMin: 60,
       });
 
-      // Setup recruit
       const recruitId = crypto.randomUUID();
       await db.insert(schema.recruits).values({
         id: recruitId,
@@ -304,17 +309,16 @@ describe("handleScheduled - Integration Tests", () => {
         guildId: "test-guild",
         channelId: "test-channel",
         messageId: "test-message",
-        targetDateLocal: "2026-01-18",
+        targetDateLocal: SCHEDULE.targetDateLocal,
         status: "open",
       });
 
-      // Setup pending entry
       await db.insert(schema.recruitEntries).values({
         recruitId,
         userId: "test-user",
         state: "pending_time",
-        createdAtUtc: "2026-01-18T10:00:00.000Z",
-        updatedAtUtc: "2026-01-18T10:00:00.000Z",
+        createdAtUtc: "2026-01-17T11:13:00.000Z",
+        updatedAtUtc: "2026-01-17T11:13:00.000Z",
         lastRemindedAtUtc: null,
       });
 
@@ -328,61 +332,52 @@ describe("handleScheduled - Integration Tests", () => {
       );
       globalThis.fetch = mockFetch;
 
-      // Simulate reminder processing
-      const nowUtc = new Date("2026-01-18T11:30:00.000Z");
-      const pendingEntries = await db
+      const nowUtc = new Date("2026-01-17T11:30:00.000Z");
+      const entry = await db
         .select()
         .from(schema.recruitEntries)
         .where(eq(schema.recruitEntries.recruitId, recruitId))
-        .all();
+        .get();
 
-      const reminderTargets = filterPendingReminders(
-        pendingEntries.map((entry) => ({
-          userId: entry.userId,
-          recruitId: entry.recruitId,
-          channelId: "test-channel",
-          lastRemindedAtUtc: entry.lastRemindedAtUtc,
-        })),
-        60,
+      const slotUtc = reminderSlotToSend(
+        {
+          ...SCHEDULE,
+          createdAtUtc: entry!.createdAtUtc,
+          lastRemindedAtUtc: entry!.lastRemindedAtUtc,
+        },
+        "Asia/Tokyo",
         nowUtc,
       );
+      expect(slotUtc).toBe("2026-01-17T11:30:00.000Z");
 
-      expect(reminderTargets).toHaveLength(1);
-
-      // Simulate successful reminder send and DB update
-      const target = reminderTargets[0];
-      const reminderMessage = buildReminderMessage(target.recruitId);
-
+      // Simulate successful reminder send and DB update (store the slot time)
+      const reminderMessage = buildReminderMessage(recruitId);
       await fetch("https://discord.com/api/v10/channels/test-channel/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
         },
-        body: JSON.stringify({
-          content: `<@${target.userId}> ${reminderMessage}`,
-        }),
+        body: JSON.stringify({ content: `<@test-user> ${reminderMessage}` }),
       });
 
-      // Update DB only after successful send
       await db
         .update(schema.recruitEntries)
-        .set({ lastRemindedAtUtc: nowUtc.toISOString() })
+        .set({ lastRemindedAtUtc: slotUtc })
         .where(
           and(
-            eq(schema.recruitEntries.recruitId, target.recruitId),
-            eq(schema.recruitEntries.userId, target.userId),
+            eq(schema.recruitEntries.recruitId, recruitId),
+            eq(schema.recruitEntries.userId, "test-user"),
           ),
         );
 
-      // Verify DB update
       const updatedEntry = await db
         .select()
         .from(schema.recruitEntries)
         .where(eq(schema.recruitEntries.recruitId, recruitId))
         .get();
 
-      expect(updatedEntry?.lastRemindedAtUtc).toBe(nowUtc.toISOString());
+      expect(updatedEntry?.lastRemindedAtUtc).toBe("2026-01-17T11:30:00.000Z");
       expect(mockFetch).toHaveBeenCalled();
     });
 
@@ -393,7 +388,6 @@ describe("handleScheduled - Integration Tests", () => {
       await db.delete(schema.schedules);
       await db.delete(schema.guildSettings);
 
-      // Setup guild settings with reminder interval
       await db.insert(schema.guildSettings).values({
         id: crypto.randomUUID(),
         guildId: "test-guild",
@@ -401,10 +395,8 @@ describe("handleScheduled - Integration Tests", () => {
         defaultIntervalMin: 30,
         defaultDurationMin: 360,
         defaultTemplate: "",
-        reminderIntervalMin: 60,
       });
 
-      // Setup recruit
       const recruitId = crypto.randomUUID();
       await db.insert(schema.recruits).values({
         id: recruitId,
@@ -412,18 +404,18 @@ describe("handleScheduled - Integration Tests", () => {
         guildId: "test-guild",
         channelId: "test-channel",
         messageId: "test-message",
-        targetDateLocal: "2026-01-18",
+        targetDateLocal: SCHEDULE.targetDateLocal,
         status: "open",
       });
 
-      // Setup pending entry with previous reminder
-      const previousReminderTime = "2026-01-18T10:00:00.000Z";
+      // 前スロット(20:30)で送信済み。次スロット(20:45)で送信対象になるが、送信失敗時は更新しない。
+      const previousReminderTime = "2026-01-17T11:30:00.000Z";
       await db.insert(schema.recruitEntries).values({
         recruitId,
         userId: "test-user",
         state: "pending_time",
-        createdAtUtc: "2026-01-18T09:00:00.000Z",
-        updatedAtUtc: "2026-01-18T09:00:00.000Z",
+        createdAtUtc: "2026-01-17T11:13:00.000Z",
+        updatedAtUtc: "2026-01-17T11:13:00.000Z",
         lastRemindedAtUtc: previousReminderTime,
       });
 
@@ -437,31 +429,25 @@ describe("handleScheduled - Integration Tests", () => {
       );
       globalThis.fetch = mockFetch;
 
-      // Simulate reminder processing
-      const nowUtc = new Date("2026-01-18T11:30:00.000Z");
-      const pendingEntries = await db
+      const nowUtc = new Date("2026-01-17T11:45:00.000Z");
+      const entry = await db
         .select()
         .from(schema.recruitEntries)
         .where(eq(schema.recruitEntries.recruitId, recruitId))
-        .all();
+        .get();
 
-      const reminderTargets = filterPendingReminders(
-        pendingEntries.map((entry) => ({
-          userId: entry.userId,
-          recruitId: entry.recruitId,
-          channelId: "test-channel",
-          lastRemindedAtUtc: entry.lastRemindedAtUtc,
-        })),
-        60,
+      const slotUtc = reminderSlotToSend(
+        {
+          ...SCHEDULE,
+          createdAtUtc: entry!.createdAtUtc,
+          lastRemindedAtUtc: entry!.lastRemindedAtUtc,
+        },
+        "Asia/Tokyo",
         nowUtc,
       );
+      expect(slotUtc).toBe("2026-01-17T11:45:00.000Z");
 
-      expect(reminderTargets).toHaveLength(1);
-
-      // Simulate failed reminder send
-      const target = reminderTargets[0];
-      const reminderMessage = buildReminderMessage(target.recruitId);
-
+      const reminderMessage = buildReminderMessage(recruitId);
       try {
         const response = await fetch("https://discord.com/api/v10/channels/test-channel/messages", {
           method: "POST",
@@ -469,9 +455,7 @@ describe("handleScheduled - Integration Tests", () => {
             "Content-Type": "application/json",
             Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
           },
-          body: JSON.stringify({
-            content: `<@${target.userId}> ${reminderMessage}`,
-          }),
+          body: JSON.stringify({ content: `<@test-user> ${reminderMessage}` }),
         });
 
         if (!response.ok) {
@@ -481,36 +465,34 @@ describe("handleScheduled - Integration Tests", () => {
         // This should not be reached
         await db
           .update(schema.recruitEntries)
-          .set({ lastRemindedAtUtc: nowUtc.toISOString() })
+          .set({ lastRemindedAtUtc: slotUtc })
           .where(
             and(
-              eq(schema.recruitEntries.recruitId, target.recruitId),
-              eq(schema.recruitEntries.userId, target.userId),
+              eq(schema.recruitEntries.recruitId, recruitId),
+              eq(schema.recruitEntries.userId, "test-user"),
             ),
           );
       } catch {
         // Expected error - DB update should be skipped
       }
 
-      // Verify DB was NOT updated
-      const entry = await db
+      const after = await db
         .select()
         .from(schema.recruitEntries)
         .where(eq(schema.recruitEntries.recruitId, recruitId))
         .get();
 
-      expect(entry?.lastRemindedAtUtc).toBe(previousReminderTime); // Should remain unchanged
+      expect(after?.lastRemindedAtUtc).toBe(previousReminderTime); // Should remain unchanged
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    it("should filter reminders based on interval", async () => {
+    it("should send on slot boundaries: first target, skip already-sent slot, skip pre-first slot", async () => {
       // Clean up
       await db.delete(schema.recruitEntries);
       await db.delete(schema.recruits);
       await db.delete(schema.schedules);
       await db.delete(schema.guildSettings);
 
-      // Setup guild settings with 30 minute reminder interval
       await db.insert(schema.guildSettings).values({
         id: crypto.randomUUID(),
         guildId: "test-guild",
@@ -518,10 +500,8 @@ describe("handleScheduled - Integration Tests", () => {
         defaultIntervalMin: 30,
         defaultDurationMin: 360,
         defaultTemplate: "",
-        reminderIntervalMin: 30,
       });
 
-      // Setup recruit
       const recruitId = crypto.randomUUID();
       await db.insert(schema.recruits).values({
         id: recruitId,
@@ -529,63 +509,76 @@ describe("handleScheduled - Integration Tests", () => {
         guildId: "test-guild",
         channelId: "test-channel",
         messageId: "test-message",
-        targetDateLocal: "2026-01-18",
+        targetDateLocal: SCHEDULE.targetDateLocal,
         status: "open",
       });
 
-      // Setup entries with different last reminded times
-      const nowUtc = new Date("2026-01-18T11:30:00.000Z");
+      const nowUtc = new Date("2026-01-17T11:30:00.000Z"); // 20:30 スロット
 
       await db.insert(schema.recruitEntries).values([
         {
+          // 20:13 登録・未送信 → 20:30 が初回対象 → 送信
           recruitId,
           userId: "user1",
           state: "pending_time",
-          createdAtUtc: "2026-01-18T09:00:00.000Z",
-          updatedAtUtc: "2026-01-18T09:00:00.000Z",
-          lastRemindedAtUtc: null, // Never reminded - should be included
+          createdAtUtc: "2026-01-17T11:13:00.000Z",
+          updatedAtUtc: "2026-01-17T11:13:00.000Z",
+          lastRemindedAtUtc: null,
         },
         {
+          // 同一スロット(20:30)で送信済み → スキップ
           recruitId,
           userId: "user2",
           state: "pending_time",
-          createdAtUtc: "2026-01-18T09:00:00.000Z",
-          updatedAtUtc: "2026-01-18T09:00:00.000Z",
-          lastRemindedAtUtc: "2026-01-18T11:00:00.000Z", // 30 min ago - should be included
+          createdAtUtc: "2026-01-17T11:13:00.000Z",
+          updatedAtUtc: "2026-01-17T11:13:00.000Z",
+          lastRemindedAtUtc: "2026-01-17T11:30:00.000Z",
         },
         {
+          // 20:28 登録 → 20:30 をスキップ、初回は 20:45 → 20:30 時点では未到来 → スキップ
           recruitId,
           userId: "user3",
           state: "pending_time",
-          createdAtUtc: "2026-01-18T09:00:00.000Z",
-          updatedAtUtc: "2026-01-18T09:00:00.000Z",
-          lastRemindedAtUtc: "2026-01-18T11:15:00.000Z", // 15 min ago - should be excluded
+          createdAtUtc: "2026-01-17T11:28:00.000Z",
+          updatedAtUtc: "2026-01-17T11:28:00.000Z",
+          lastRemindedAtUtc: null,
+        },
+        {
+          // 「未定」は時間入力リマインドの対象外
+          recruitId,
+          userId: "user4",
+          state: "undecided",
+          createdAtUtc: "2026-01-17T11:13:00.000Z",
+          updatedAtUtc: "2026-01-17T11:13:00.000Z",
+          lastRemindedAtUtc: null,
         },
       ]);
 
       const pendingEntries = await db
         .select()
         .from(schema.recruitEntries)
-        .where(eq(schema.recruitEntries.recruitId, recruitId))
+        .where(
+          and(
+            eq(schema.recruitEntries.recruitId, recruitId),
+            eq(schema.recruitEntries.state, "pending_time"),
+          ),
+        )
         .all();
 
-      const reminderTargets = filterPendingReminders(
-        pendingEntries.map((entry) => ({
-          userId: entry.userId,
-          recruitId: entry.recruitId,
-          channelId: "test-channel",
-          lastRemindedAtUtc: entry.lastRemindedAtUtc,
-        })),
-        30,
-        nowUtc,
+      const targets = pendingEntries.filter(
+        (entry) =>
+          reminderSlotToSend(
+            {
+              ...SCHEDULE,
+              createdAtUtc: entry.createdAtUtc,
+              lastRemindedAtUtc: entry.lastRemindedAtUtc,
+            },
+            "Asia/Tokyo",
+            nowUtc,
+          ) !== null,
       );
 
-      // Should include user1 (never reminded) and user2 (30+ min ago)
-      // Should exclude user3 (less than 30 min ago)
-      expect(reminderTargets).toHaveLength(2);
-      expect(reminderTargets.some((t) => t.userId === "user1")).toBe(true);
-      expect(reminderTargets.some((t) => t.userId === "user2")).toBe(true);
-      expect(reminderTargets.some((t) => t.userId === "user3")).toBe(false);
+      expect(targets.map((t) => t.userId)).toEqual(["user1"]);
     });
   });
 

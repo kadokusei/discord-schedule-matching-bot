@@ -385,6 +385,77 @@ describe("Component guards against closed recruits", () => {
   });
 });
 
+describe("handleRecruitTime - 「未定」選択", () => {
+  const db = drizzle(env.DB, { schema });
+
+  const runComponent = async (interaction: APIMessageComponentInteraction) => {
+    const promises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        promises.push(p);
+      },
+    };
+    handleComponentInteraction(interaction, env, ctx);
+    await Promise.all(promises);
+  };
+
+  const timeSelect = (customId: string, value: string): APIMessageComponentInteraction =>
+    ({
+      type: 3,
+      id: "i",
+      application_id: "test-app-id",
+      token: "tok",
+      member: { user: { id: "clicker" } },
+      data: { custom_id: customId, component_type: 3, values: [value] },
+    }) as unknown as APIMessageComponentInteraction;
+
+  beforeEach(async () => {
+    await db.delete(schema.recruitEntries);
+    await db.delete(schema.recruits);
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(""),
+      } as Response),
+    ) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("「未定」選択で state=undecided・availableFromUtc=null・lastRemindedAtUtc=null になる", async () => {
+    await db.insert(schema.recruits).values({
+      id: "rec-undecided",
+      scheduleId: "sched-x",
+      guildId: "guild-x",
+      channelId: "ch-x",
+      messageId: "msg-x",
+      targetDateLocal: "2026-06-15",
+      status: "open",
+    });
+
+    await runComponent(timeSelect("recruit:time:rec-undecided", "undecided"));
+
+    const entry = await db
+      .select()
+      .from(schema.recruitEntries)
+      .where(
+        and(
+          eq(schema.recruitEntries.recruitId, "rec-undecided"),
+          eq(schema.recruitEntries.userId, "clicker"),
+        ),
+      )
+      .get();
+
+    expect(entry?.state).toBe("undecided");
+    expect(entry?.availableFromUtc).toBeNull();
+    expect(entry?.lastRemindedAtUtc).toBeNull();
+  });
+});
+
 // Note: Full integration tests for component interactions require SELF.fetch
 // and are better tested through the actual worker endpoint.
 // The above tests cover the core logic and edge cases.
