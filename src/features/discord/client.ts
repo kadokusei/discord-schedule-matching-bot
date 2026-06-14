@@ -66,8 +66,10 @@ export interface UpdateRecruitMessageParams {
   status: "open" | "matched" | "cancelled" | "deleted";
   confirmedCount: number;
   pendingCount: number;
+  undecidedCount?: number;
   confirmedUsers?: { userId: string; availableFromUtc: string }[];
   pendingUserIds?: string[];
+  undecidedUserIds?: string[];
   matchedMembers?: string[];
   matchedTime?: string;
   timezone?: string;

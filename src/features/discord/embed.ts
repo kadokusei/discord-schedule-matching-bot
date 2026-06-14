@@ -4,8 +4,10 @@ export interface RecruitEmbedParams {
   status: "open" | "matched" | "cancelled" | "deleted";
   confirmedCount: number;
   pendingCount: number;
+  undecidedCount?: number;
   confirmedUsers?: { userId: string; availableFromUtc: string }[];
   pendingUserIds?: string[];
+  undecidedUserIds?: string[];
   matchedMembers?: string[];
   matchedTime?: string;
   timezone?: string;
@@ -35,6 +37,12 @@ function formatPendingUsers(userIds: string[]): string {
   return userIds.map((id) => `<@${id}> (時間回答待ち)`).join(" ");
 }
 
+function formatUndecidedUsers(userIds: string[]): string {
+  if (userIds.length === 0) return "";
+
+  return userIds.map((id) => `<@${id}> (未定)`).join(" ");
+}
+
 export function buildRecruitEmbed(params: RecruitEmbedParams) {
   const color = getEmbedColor(params.status);
 
@@ -57,8 +65,12 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
     params.pendingUserIds && params.pendingUserIds.length > 0
       ? `\n${formatPendingUsers(params.pendingUserIds)}`
       : "";
+  const undecidedUsersPart =
+    params.undecidedUserIds && params.undecidedUserIds.length > 0
+      ? `\n${formatUndecidedUsers(params.undecidedUserIds)}`
+      : "";
 
-  const statusValue = `確定: ${params.confirmedCount}人${confirmedUsersPart}\n回答待ち: ${params.pendingCount}人${pendingUsersPart}`;
+  const statusValue = `確定: ${params.confirmedCount}人${confirmedUsersPart}\n回答待ち: ${params.pendingCount}人${pendingUsersPart}\n未定: ${params.undecidedCount ?? 0}人${undecidedUsersPart}`;
 
   const fields: { name: string; value: string; inline: boolean }[] = [
     {

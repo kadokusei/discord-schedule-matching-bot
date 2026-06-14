@@ -14,8 +14,8 @@ import {
   formatRegisterNudge,
   formatSmallPartyProposal,
   isRecruitExpired,
+  reminderSlotToSend,
   shouldCreateInstance,
-  shouldSendReminder,
 } from "../features/recruit";
 import { rankStringFromStored } from "../features/riot";
 import type { Env } from "../lib/types";
@@ -300,26 +300,31 @@ export async function handleScheduled(env: Env): Promise<void> {
 
   const recruitsByRecruitId = new Map(recruitsData.map((r) => [r.id, r]));
 
-  // 各 pending エントリについて、その募集が属するギルドの設定でリマインド判定する
+  // 各 pending エントリについて、募集開始時刻からの interval スロット境界でリマインド判定する。
+  // 登録直後のスロットはスキップし、同一スロットの重複送信は lastRemindedAtUtc で抑制する。
   for (const entry of pendingEntries) {
     const recruit = recruitsByRecruitId.get(entry.recruitId);
     if (!recruit) continue;
 
-    const guildSetting = settingsByGuild.get(recruit.guildId);
-    const reminderIntervalMin = guildSetting?.reminderIntervalMin;
+    const schedule = allSchedules.find((s) => s.id === recruit.scheduleId);
+    if (!schedule) continue;
 
-    const shouldRemind = shouldSendReminder(
+    const tz = settingsByGuild.get(recruit.guildId)?.timezone ?? "Asia/Tokyo";
+
+    const slotUtc = reminderSlotToSend(
       {
-        userId: entry.userId,
-        recruitId: entry.recruitId,
-        channelId: recruit.channelId,
+        targetDateLocal: recruit.targetDateLocal,
+        postTimeHHmm: schedule.postTimeHHmm,
+        intervalMin: schedule.intervalMin,
+        durationMin: schedule.durationMin,
+        createdAtUtc: entry.createdAtUtc,
         lastRemindedAtUtc: entry.lastRemindedAtUtc,
       },
-      reminderIntervalMin,
+      tz,
       nowUtc,
     );
 
-    if (!shouldRemind) continue;
+    if (!slotUtc) continue;
 
     const reminderMessage = buildReminderMessage(entry.recruitId);
 
@@ -329,10 +334,10 @@ export async function handleScheduled(env: Env): Promise<void> {
         users: [entry.userId],
       });
 
-      // メッセージ送信成功後のみリマインド時刻を更新
+      // メッセージ送信成功後のみリマインド時刻を更新（スロット時刻を保存して同一スロット重複を抑制）
       await db
         .update(recruitEntries)
-        .set({ lastRemindedAtUtc: nowUtc.toISOString() })
+        .set({ lastRemindedAtUtc: slotUtc })
         .where(
           and(
             eq(recruitEntries.recruitId, entry.recruitId),

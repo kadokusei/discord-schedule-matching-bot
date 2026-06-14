@@ -35,6 +35,9 @@ const deferredEphemeral = (): APIInteractionResponse => ({
 /** 終端状態の募集に対する操作を弾くときの定型メッセージ。 */
 const RECRUIT_CLOSED_MESSAGE = "この募集は終了しているため、操作できません。";
 
+/** 時間選択セレクトで「未定」を表す value。時間スロット(ISO8601)と区別する固定値。 */
+const UNDECIDED_VALUE = "undecided";
+
 /** @original を編集して結果を本人に反映。失敗時はログのみ。 */
 const respond = async (
   env: Env,
@@ -175,7 +178,10 @@ const handleRecruitJoin = async (
             type: ComponentType.StringSelect,
             custom_id: `recruit:time:${recruitId}`,
             placeholder: "希望時間を選択",
-            options: timeOptions.map((opt) => ({ label: opt.label, value: opt.value })),
+            options: [
+              ...timeOptions.map((opt) => ({ label: opt.label, value: opt.value })),
+              { label: "未定", value: UNDECIDED_VALUE },
+            ],
             min_values: 1,
             max_values: 1,
           },
@@ -227,6 +233,39 @@ const handleRecruitTime = async (
     .get();
 
   const timezone = settings?.timezone ?? "Asia/Tokyo";
+
+  // 「未定」を選択した場合: マッチング計算には含めず、通常の時間入力リマインドも止める。
+  // 人数が揃ったときだけ recomputeMatch から改めて通知する（lastRemindedAtUtc は未送信に初期化）。
+  if (selectedTime === UNDECIDED_VALUE) {
+    await db
+      .insert(schema.recruitEntries)
+      .values({
+        recruitId,
+        userId,
+        state: "undecided",
+        availableFromUtc: null,
+        createdAtUtc: nowUtc,
+        updatedAtUtc: nowUtc,
+        lastRemindedAtUtc: null,
+      })
+      .onConflictDoUpdate({
+        target: [schema.recruitEntries.recruitId, schema.recruitEntries.userId],
+        set: {
+          state: "undecided",
+          availableFromUtc: null,
+          updatedAtUtc: nowUtc,
+          lastRemindedAtUtc: null,
+        },
+      });
+
+    await recomputeMatch(env, recruitId, userId);
+
+    await respond(env, interaction, {
+      content: "希望時間を「未定」で登録しました。メンバーが揃ったら改めてお知らせします。",
+      components: [],
+    });
+    return;
+  }
 
   await db
     .insert(schema.recruitEntries)

@@ -202,6 +202,25 @@ describe("buildRecruitEmbed", () => {
     expect(statusField?.value).toContain("<@user4>");
   });
 
+  it("should show undecided count (defaults to 0 when omitted)", () => {
+    const result = buildRecruitEmbed(baseParams);
+    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
+    expect(statusField?.value).toContain("未定: 0人");
+  });
+
+  it("should include undecided users when provided", () => {
+    const params: RecruitEmbedParams = {
+      ...baseParams,
+      undecidedCount: 2,
+      undecidedUserIds: ["user5", "user6"],
+    };
+    const result = buildRecruitEmbed(params);
+    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
+    expect(statusField?.value).toContain("未定: 2人");
+    expect(statusField?.value).toContain("<@user5> (未定)");
+    expect(statusField?.value).toContain("<@user6> (未定)");
+  });
+
   it("should include matching result when matched", () => {
     const params: RecruitEmbedParams = {
       ...baseParams,
