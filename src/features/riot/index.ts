@@ -13,3 +13,5 @@ export type {
   FetchRankResult,
   ValorantRank,
 } from "./api";
+export { buildRefreshSummary, refreshUserRanks } from "./refresh";
+export type { AccountRefreshResult, RefreshUserRanksOptions } from "./refresh";

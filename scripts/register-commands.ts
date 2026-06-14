@@ -124,6 +124,11 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
       },
       {
         type: ApplicationCommandOptionType.Subcommand,
+        name: "refresh",
+        description: "登録済みアカウントのランクを再取得します",
+      },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
         name: "help",
         description: "riotコマンドの使い方を表示します",
       },
