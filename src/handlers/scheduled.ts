@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { guildSettings, recruitEntries, recruits, riotAccounts, schedules } from "../db/schema";
 import {
@@ -8,13 +8,11 @@ import {
   updateDiscordMessage,
 } from "../features/discord";
 import {
-  buildReminderMessage,
   buildSmallPartyProposal,
   currentIntervalSlotUtc,
   formatRegisterNudge,
   formatSmallPartyProposal,
   isRecruitExpired,
-  reminderSlotToSend,
   shouldCreateInstance,
 } from "../features/recruit";
 import { rankStringFromStored } from "../features/riot";
@@ -264,14 +262,12 @@ export async function handleScheduled(env: Env): Promise<void> {
         .all();
 
       const confirmedEntries = entries.filter((e) => e.state === "confirmed");
-      const pendingEntries = entries.filter((e) => e.state === "pending_time");
 
       await updateDiscordMessage(env, recruit.channelId, recruit.messageId, {
         targetDateLocal: recruit.targetDateLocal,
         postTimeHHmm: schedule.postTimeHHmm,
         status: "cancelled",
         confirmedCount: confirmedEntries.length,
-        pendingCount: pendingEntries.length,
         timezone: tz,
       });
     } catch (error) {
@@ -281,77 +277,4 @@ export async function handleScheduled(env: Env): Promise<void> {
 
   // 少人数(2〜3人)パーティ提案パス（interval スロット境界契機）
   await proposeSmallParties(env, db, allSchedules, settingsByGuild, nowUtc);
-
-  // リマインド処理
-  const pendingEntries = await db
-    .select()
-    .from(recruitEntries)
-    .where(eq(recruitEntries.state, "pending_time"))
-    .all();
-
-  if (pendingEntries.length === 0) {
-    return;
-  }
-
-  // 対象 recruit 情報を取得
-  const recruitIds = pendingEntries.map((e) => e.recruitId);
-  const recruitsData = await db
-    .select()
-    .from(recruits)
-    .where(inArray(recruits.id, recruitIds))
-    .all();
-
-  const recruitsByRecruitId = new Map(recruitsData.map((r) => [r.id, r]));
-
-  // 各 pending エントリについて、募集開始時刻からの interval スロット境界でリマインド判定する。
-  // 登録直後のスロットはスキップし、同一スロットの重複送信は lastRemindedAtUtc で抑制する。
-  for (const entry of pendingEntries) {
-    const recruit = recruitsByRecruitId.get(entry.recruitId);
-    if (!recruit) continue;
-
-    const schedule = allSchedules.find((s) => s.id === recruit.scheduleId);
-    if (!schedule) continue;
-
-    const tz = settingsByGuild.get(recruit.guildId)?.timezone ?? "Asia/Tokyo";
-
-    const slotUtc = reminderSlotToSend(
-      {
-        targetDateLocal: recruit.targetDateLocal,
-        postTimeHHmm: schedule.postTimeHHmm,
-        intervalMin: schedule.intervalMin,
-        durationMin: schedule.durationMin,
-        createdAtUtc: entry.createdAtUtc,
-        lastRemindedAtUtc: entry.lastRemindedAtUtc,
-      },
-      tz,
-      nowUtc,
-    );
-
-    if (!slotUtc) continue;
-
-    const reminderMessage = buildReminderMessage(entry.recruitId);
-
-    try {
-      // 対象ユーザーのみ ping
-      await postChannelMessage(env, recruit.channelId, `<@${entry.userId}> ${reminderMessage}`, {
-        users: [entry.userId],
-      });
-
-      // メッセージ送信成功後のみリマインド時刻を更新（スロット時刻を保存して同一スロット重複を抑制）
-      await db
-        .update(recruitEntries)
-        .set({ lastRemindedAtUtc: slotUtc })
-        .where(
-          and(
-            eq(recruitEntries.recruitId, entry.recruitId),
-            eq(recruitEntries.userId, entry.userId),
-          ),
-        );
-    } catch (error) {
-      console.error(
-        `Failed to send reminder to user ${entry.userId} in recruit ${entry.recruitId}:`,
-        error,
-      );
-    }
-  }
 }

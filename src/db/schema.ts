@@ -57,7 +57,7 @@ export const recruitEntries = sqliteTable(
       .notNull()
       .references(() => recruits.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull(),
-    state: text("state").notNull().default("pending_time"),
+    state: text("state").notNull(),
     availableFromUtc: text("available_from_utc"),
     createdAtUtc: text("created_at_utc").notNull(),
     updatedAtUtc: text("updated_at_utc").notNull(),
