@@ -55,49 +55,33 @@ export function buildSmallPartyProposal(
   return { party, unrankedUserIds };
 }
 
-/** 少人数パーティ提案メッセージ本文（同意ボタンと併せて投稿する）。 */
+/**
+ * 少人数パーティ通知メッセージ本文（同意ボタンは無く、純粋な案内）。
+ * earlierMeetTimeUtc / earlierMemberIds が与えられれば、全員集合より早く始められる
+ * サブ組の案内を1行追記する。
+ */
 export function formatSmallPartyProposal(
   memberIds: string[],
   meetTimeUtc: string,
   size: number,
   tz: string,
+  earlier?: { memberIds: string[]; meetTimeUtc: string },
 ): string {
   const members = memberIds.map((id) => `<@${id}>`).join(" ");
-  return [
+  const lines = [
     `📣 ランク条件を満たす${size}人で行けそうです！`,
     `🕘 集合時刻: ${utcToLocalHHmm(meetTimeUtc, tz)}`,
     `👥 メンバー: ${members}`,
-    "対象メンバー全員が【行く】を押すと確定します。",
-  ].join("\n");
-}
+  ];
 
-export interface ConsentResult {
-  /** 押下者が提案メンバーに含まれるか。 */
-  isMember: boolean;
-  /** 更新後の同意ユーザーID一覧（メンバーのみ・重複なし）。 */
-  consent: string[];
-  /** 全メンバーが同意したか。 */
-  allConfirmed: boolean;
-}
+  if (earlier && earlier.memberIds.length > 0) {
+    const earlierMembers = earlier.memberIds.map((id) => `<@${id}>`).join(" ");
+    lines.push(
+      `⏰ 早く始めるなら: ${earlierMembers} は ${utcToLocalHHmm(earlier.meetTimeUtc, tz)} から行けます`,
+    );
+  }
 
-/**
- * 同意ボタン押下を適用し、更新後の同意集合と確定可否を返す純粋関数。
- * - メンバー外の押下は同意に反映しない。
- * - 同意集合はメンバーに限定し重複を排除する。
- */
-export function applyConsent(
-  memberIds: string[],
-  currentConsent: string[],
-  userId: string,
-): ConsentResult {
-  const memberSet = new Set(memberIds);
-  const isMember = memberSet.has(userId);
-
-  const merged = isMember ? [...currentConsent, userId] : currentConsent;
-  const consent = [...new Set(merged)].filter((id) => memberSet.has(id));
-  const allConfirmed = memberIds.every((id) => consent.includes(id));
-
-  return { isMember, consent, allConfirmed };
+  return lines.join("\n");
 }
 
 /** Riotアカウント未登録ユーザーへの登録促しメッセージ。 */

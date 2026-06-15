@@ -7,8 +7,6 @@ export {
   updateDiscordMessage,
   postRecruitMessage,
   buildRecruitComponents,
-  buildSmallPartyComponents,
-  postSmallPartyProposal,
   editOriginalInteractionResponse,
 } from "./client";
 export type { AllowedMentions, UpdateRecruitMessageParams } from "./client";

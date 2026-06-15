@@ -71,6 +71,20 @@ describe("recomputeMatch - Integration Tests", () => {
     });
   };
 
+  // rankName 例: "Gold 2" / "Iron 1" / "Radiant"。tier/division は major-tier 判定に無関係。
+  const insertRiotAccount = async (userId: string, rankName: string) => {
+    await db.insert(schema.riotAccounts).values({
+      id: crypto.randomUUID(),
+      userId,
+      gameName: `${userId}-name`,
+      tagLine: "JP1",
+      region: "ap",
+      rank: JSON.stringify({ tier: 0, division: 1, rank: rankName }),
+      createdAtUtc: "2026-01-18T10:00:00.000Z",
+      lastFetchedAtUtc: "2026-01-18T10:00:00.000Z",
+    });
+  };
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -466,6 +480,9 @@ describe("recomputeMatch - Integration Tests", () => {
       const { recruitId } = await setupBase();
       await insertEntry(recruitId, "userC", "confirmed", "2026-01-18T11:00:00.000Z");
       await insertEntry(recruitId, "userU", "undecided", null);
+      // 確定者と未定者がランク差制限を満たして組める（少人数局面なのでランク必須）
+      await insertRiotAccount("userC", "Gold 1");
+      await insertRiotAccount("userU", "Gold 2");
 
       const calls = trackFetch();
       await recomputeMatch(env, recruitId);
@@ -479,6 +496,49 @@ describe("recomputeMatch - Integration Tests", () => {
         .where(eq(schema.recruitEntries.userId, "userU"))
         .get();
       expect(entry?.lastRemindedAtUtc).toBeTruthy();
+    });
+
+    it("少人数局面: アカウント未登録の未定者へは nudge を送らない（報告ケース）", async () => {
+      const { recruitId } = await setupBase();
+      await insertEntry(recruitId, "userC", "confirmed", "2026-01-18T11:00:00.000Z");
+      await insertEntry(recruitId, "userU", "undecided", null);
+      await insertRiotAccount("userC", "Gold 1");
+      // userU はアカウント未登録
+
+      const calls = trackFetch();
+      await recomputeMatch(env, recruitId);
+
+      expect(findNudge(calls, "userU")).toBeFalsy();
+    });
+
+    it("少人数局面: ランク差が大きすぎて組めない未定者へは nudge を送らない", async () => {
+      const { recruitId } = await setupBase();
+      await insertEntry(recruitId, "userC", "confirmed", "2026-01-18T11:00:00.000Z");
+      await insertEntry(recruitId, "userU", "undecided", null);
+      await insertRiotAccount("userC", "Iron 1");
+      await insertRiotAccount("userU", "Radiant");
+
+      const calls = trackFetch();
+      await recomputeMatch(env, recruitId);
+
+      expect(findNudge(calls, "userU")).toBeFalsy();
+    });
+
+    it("5人局面: confirmed+undecided>=5 ならランクが外れた未定者にも nudge を送る", async () => {
+      const { recruitId } = await setupBase();
+      const baseTime = "2026-01-18T11:00:00.000Z";
+      // 確定 4 ＋ 未定 1 = 5。フルマッチに届きうるのでランク差は不問。
+      for (let i = 1; i <= 4; i++) {
+        await insertEntry(recruitId, `user${i}`, "confirmed", baseTime);
+        await insertRiotAccount(`user${i}`, "Iron 1");
+      }
+      await insertEntry(recruitId, "userU", "undecided", null);
+      await insertRiotAccount("userU", "Radiant"); // Iron とは少人数で組めないランク差
+
+      const calls = trackFetch();
+      await recomputeMatch(env, recruitId);
+
+      expect(findNudge(calls, "userU")).toBeTruthy();
     });
 
     it("does NOT notify when total (confirmed + undecided) is below 2", async () => {
@@ -585,6 +645,77 @@ describe("recomputeMatch - Integration Tests", () => {
       expect(memberIds).not.toContain("userU");
       // 確定 6 ＋ 未定 1 のため、未定者へ nudge も飛ぶ
       expect(findNudge(calls, "userU")).toBeTruthy();
+    });
+  });
+
+  describe("5人マッチの早期サブ組併記", () => {
+    // 確定メッセージ(PATCH)の embed フィールドを抽出する
+    const matchedEmbedFields = (
+      calls: { url: string; method: string; body: string }[],
+    ): { name: string; value: string }[] => {
+      const patch = calls.find(
+        (c) => c.method === "PATCH" && c.url.includes("/channels/test-channel/messages/"),
+      );
+      if (!patch) return [];
+      const payload = JSON.parse(patch.body) as {
+        embeds?: { fields?: { name: string; value: string }[] }[];
+      };
+      return payload.embeds?.[0]?.fields ?? [];
+    };
+
+    const trackFetch = () => {
+      const calls: { url: string; method: string; body: string }[] = [];
+      const mockFetch = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({
+          url: String(url),
+          method: init?.method ?? "GET",
+          body: typeof init?.body === "string" ? init.body : "",
+        });
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+          text: () => Promise.resolve(""),
+        } as Response);
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+      return calls;
+    };
+
+    it("全員集合より早く始められるランク適合の組があれば確定 embed に併記する", async () => {
+      const { recruitId } = await setupBase();
+      // 3人は 20:00(11:00Z) から、2人は 20:30(11:30Z) から。全員 Gold。
+      const early = "2026-01-18T11:00:00.000Z";
+      const late = "2026-01-18T11:30:00.000Z";
+      for (let i = 1; i <= 3; i++) {
+        await insertEntry(recruitId, `user${i}`, "confirmed", early);
+        await insertRiotAccount(`user${i}`, "Gold 1");
+      }
+      for (let i = 4; i <= 5; i++) {
+        await insertEntry(recruitId, `user${i}`, "confirmed", late);
+        await insertRiotAccount(`user${i}`, "Gold 2");
+      }
+
+      const calls = trackFetch();
+      await recomputeMatch(env, recruitId);
+
+      const field = matchedEmbedFields(calls).find((f) => f.name === "早く始めるなら");
+      expect(field).toBeTruthy();
+      expect(field?.value).toContain("20:00"); // 早期サブ組の集合時刻(JST)
+    });
+
+    it("全員が同時刻なら早期サブ組は併記しない", async () => {
+      const { recruitId } = await setupBase();
+      const same = "2026-01-18T11:00:00.000Z";
+      for (let i = 1; i <= 5; i++) {
+        await insertEntry(recruitId, `user${i}`, "confirmed", same);
+        await insertRiotAccount(`user${i}`, "Gold 1");
+      }
+
+      const calls = trackFetch();
+      await recomputeMatch(env, recruitId);
+
+      expect(matchedEmbedFields(calls).find((f) => f.name === "早く始めるなら")).toBeUndefined();
     });
   });
 });

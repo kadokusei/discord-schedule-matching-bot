@@ -76,6 +76,7 @@ export interface UpdateRecruitMessageParams {
   undecidedUserIds?: string[];
   matchedMembers?: string[];
   matchedTime?: string;
+  earlierSubParty?: { memberIds: string[]; meetTimeUtc: string };
   timezone?: string;
 }
 
@@ -162,57 +163,6 @@ export function buildRecruitComponents(
       ],
     },
   ];
-}
-
-/** 少人数(2〜3人)パーティ提案メッセージに付与する同意ボタン（行く）。 */
-export function buildSmallPartyComponents(
-  recruitId: string,
-): APIActionRowComponent<APIComponentInMessageActionRow>[] {
-  return [
-    {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Success,
-          label: "行く",
-          custom_id: `recruit:party_confirm:${recruitId}`,
-        },
-      ],
-    },
-  ];
-}
-
-/**
- * 少人数パーティ提案を同意ボタン付きで投稿する。候補メンバーのみ ping する。
- */
-export async function postSmallPartyProposal(
-  env: Env,
-  channelId: string,
-  recruitId: string,
-  content: string,
-  mentionUserIds: string[],
-): Promise<void> {
-  const payload = {
-    content,
-    components: buildSmallPartyComponents(recruitId),
-    allowed_mentions:
-      mentionUserIds.length > 0 ? ({ users: mentionUserIds } as AllowedMentions) : NO_MENTIONS,
-  };
-
-  const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Discord API error: ${response.status} ${text}`);
-  }
 }
 
 export async function postRecruitMessage(

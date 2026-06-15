@@ -6,7 +6,12 @@ import {
   postChannelMessage,
   updateDiscordMessage,
 } from "../features/discord";
-import { type Entry, computeBestParty } from "../features/matching";
+import {
+  type Entry,
+  canUserJoinAnyParty,
+  computeBestParty,
+  findEarliestSubParty,
+} from "../features/matching";
 import {
   type Match,
   buildUndecidedNudge,
@@ -16,6 +21,7 @@ import {
   matchSignature,
   mentionTargets,
 } from "../features/recruit";
+import { rankStringFromStored } from "../features/riot";
 import type { Env } from "../lib/types";
 
 type DiscordUpdateResult = { success: true } | { success: false; error: Error };
@@ -68,34 +74,6 @@ export async function recomputeMatch(
     return;
   }
 
-  // 少人数提案中に提案メンバーの誰かが確定状態を外れたら提案を無効化する
-  if (recruit.smallPartyStatus === "proposed") {
-    const confirmedUserIds = new Set(
-      entries.filter((e) => e.state === "confirmed" && e.availableFromUtc).map((e) => e.userId),
-    );
-    let proposedMembers: string[] = [];
-    try {
-      const parsed = JSON.parse(recruit.smallPartyMemberIdsJson ?? "[]");
-      proposedMembers = Array.isArray(parsed) ? (parsed as string[]) : [];
-    } catch {
-      proposedMembers = [];
-    }
-    const stillValid =
-      proposedMembers.length > 0 && proposedMembers.every((id) => confirmedUserIds.has(id));
-    if (!stillValid) {
-      await db
-        .update(recruits)
-        .set({
-          smallPartyStatus: null,
-          smallPartyMemberIdsJson: null,
-          smallPartyMeetTimeUtc: null,
-          smallPartyConsentJson: null,
-          smallPartyProposedAtUtc: null,
-        })
-        .where(eq(recruits.id, recruitId));
-    }
-  }
-
   // schedule を取得して postTimeHHmm を取得
   const schedule = await db
     .select()
@@ -134,14 +112,43 @@ export async function recomputeMatch(
 
   const undecidedUserIds = undecidedEntries.map((entry) => entry.userId);
 
+  // 各ユーザーのランク情報を取得（nudge のランク適合判定とマッチ計算の両方で使う）
+  const userIds = entries.map((e) => e.userId);
+  const riotAccountList = await db
+    .select()
+    .from(riotAccounts)
+    .where(inArray(riotAccounts.userId, userIds))
+    .all();
+
+  // computeBestParty 用: ユーザーごとの代表ランク(JSON文字列)
+  const userRanks = new Map<string, string>();
+  // 少人数ランク適合判定用: ユーザーごとの全アカウントのランク表示名
+  const ranksByUser = new Map<string, string[]>();
+  for (const account of riotAccountList) {
+    userRanks.set(account.userId, account.rank);
+    const rank = rankStringFromStored(account.rank);
+    if (rank) {
+      ranksByUser.set(account.userId, [...(ranksByUser.get(account.userId) ?? []), rank]);
+    }
+  }
+
   // 「未定」者への人数充足リマインド: 確定者＋未定者が少人数の下限(2)に達したら、
   // 未送信(lastRemindedAtUtc === null)の未定者へ 1 回だけ時間確定を促す。
   // ただし本人が自分のアクション（未定への変更など）でトリガした recompute では本人へ送らない。
-  // その後、別メンバーの動きで人数が揃った状態で recompute が走れば 1 回だけ送る。
+  // また「実際にパーティへ入れる未定者」だけに送る:
+  //   - 5人(フルマッチ)に届きうる(confirmed+undecided>=5)ならランク差/アカウント不問
+  //   - そうでなければ少人数でランク差制限を満たして組める未定者のみ(canUserJoinAnyParty)
   if (confirmedCount + undecidedCount >= 2) {
+    const fivePossible = confirmedCount + undecidedCount >= 5;
+    const confirmedUserIds = confirmedUsers.map((u) => u.userId);
     for (const entry of undecidedEntries) {
       if (entry.lastRemindedAtUtc !== null) continue;
       if (entry.userId === triggeredBy) continue;
+      if (!fivePossible) {
+        const targetRanks = ranksByUser.get(entry.userId) ?? [];
+        const otherRanks = confirmedUserIds.map((id) => ranksByUser.get(id) ?? []);
+        if (!canUserJoinAnyParty(targetRanks, otherRanks)) continue;
+      }
       try {
         await postChannelMessage(
           env,
@@ -165,19 +172,6 @@ export async function recomputeMatch(
   }
 
   const previousMatch = buildMatchFromRecruit(recruit);
-
-  // 各ユーザーのランク情報を取得
-  const userIds = entries.map((e) => e.userId);
-  const riotAccountList = await db
-    .select()
-    .from(riotAccounts)
-    .where(inArray(riotAccounts.userId, userIds))
-    .all();
-
-  const userRanks = new Map<string, string>();
-  for (const account of riotAccountList) {
-    userRanks.set(account.userId, account.rank);
-  }
 
   const confirmedEntries = entries
     .filter((entry) => entry.state === "confirmed" && entry.availableFromUtc)
@@ -230,6 +224,20 @@ export async function recomputeMatch(
   const bestParty = computeBestParty(confirmedEntries);
   const signature = matchSignature(bestParty);
 
+  // 全員集合(最遅時刻)より早く始められる、ランク条件を満たす2〜3人のサブ組を探して併記する
+  const partyMemberSet = new Set(bestParty.memberIds);
+  const earlierSubParty = findEarliestSubParty(
+    confirmedEntries
+      .filter((e) => partyMemberSet.has(e.userId))
+      .map((e) => ({
+        userId: e.userId,
+        availableFromUtc: e.availableFromUtc,
+        createdAtUtc: e.createdAtUtc,
+        accountRanks: ranksByUser.get(e.userId) ?? [],
+      })),
+    bestParty.meetTimeUtc,
+  );
+
   // Discord更新を先に試みる
   const discordResult = await attemptDiscordUpdate(env, recruit.channelId, recruit.messageId, {
     targetDateLocal: recruit.targetDateLocal,
@@ -245,6 +253,9 @@ export async function recomputeMatch(
       hour: "2-digit",
       minute: "2-digit",
     }),
+    earlierSubParty: earlierSubParty
+      ? { memberIds: earlierSubParty.memberIds, meetTimeUtc: earlierSubParty.meetTimeUtc }
+      : undefined,
     timezone,
   });
 
@@ -279,112 +290,6 @@ export async function recomputeMatch(
     timezone,
     triggeredBy,
   );
-}
-
-/**
- * recruit に保存済みの少人数(2〜3人)パーティ提案を確定させる。
- * recomputeMatch は確定者<5でopenに戻すため、少人数確定では使わずこちらを使う。
- * 提案メンバー全員の同意が揃った後に呼ぶ前提。
- */
-export async function finalizeSmallParty(
-  env: Env,
-  recruitId: string,
-  triggeredBy?: string,
-): Promise<void> {
-  const db = drizzle(env.DB);
-
-  const recruit = await db.select().from(recruits).where(eq(recruits.id, recruitId)).get();
-  if (!recruit || recruit.smallPartyStatus !== "proposed") {
-    return;
-  }
-
-  // 終端状態の募集は確定処理を行わない（復活防止）
-  if (!isRecruitActive(recruit.status)) {
-    return;
-  }
-
-  const meetTimeUtc = recruit.smallPartyMeetTimeUtc;
-  let memberIds: string[];
-  try {
-    memberIds = JSON.parse(recruit.smallPartyMemberIdsJson ?? "[]") as string[];
-  } catch {
-    return;
-  }
-  if (!Array.isArray(memberIds) || memberIds.length === 0 || !meetTimeUtc) {
-    return;
-  }
-
-  const schedule = await db
-    .select()
-    .from(schedules)
-    .where(eq(schedules.id, recruit.scheduleId))
-    .get();
-  const postTimeHHmm = schedule?.postTimeHHmm ?? "20:00";
-
-  const settings = await db
-    .select()
-    .from(guildSettings)
-    .where(eq(guildSettings.guildId, recruit.guildId))
-    .get();
-  const timezone = settings?.timezone ?? "Asia/Tokyo";
-
-  const entries = await db
-    .select()
-    .from(recruitEntries)
-    .where(eq(recruitEntries.recruitId, recruitId))
-    .all();
-
-  const confirmedCount = entries.filter((e) => e.state === "confirmed").length;
-  const undecidedCount = entries.filter((e) => e.state === "undecided").length;
-  const confirmedUsers = entries
-    .filter(
-      (e): e is typeof e & { availableFromUtc: NonNullable<typeof e.availableFromUtc> } =>
-        e.state === "confirmed" && e.availableFromUtc !== null,
-    )
-    .map((e) => ({ userId: e.userId, availableFromUtc: e.availableFromUtc }));
-  const undecidedUserIds = entries.filter((e) => e.state === "undecided").map((e) => e.userId);
-
-  const previousMatch = buildMatchFromRecruit(recruit);
-  const nextMatch = { memberIds, meetTimeUtc };
-  const signature = matchSignature(nextMatch);
-
-  const discordResult = await attemptDiscordUpdate(env, recruit.channelId, recruit.messageId, {
-    targetDateLocal: recruit.targetDateLocal,
-    postTimeHHmm,
-    status: "matched",
-    confirmedCount,
-    undecidedCount,
-    confirmedUsers,
-    undecidedUserIds,
-    matchedMembers: memberIds,
-    matchedTime: new Date(meetTimeUtc).toLocaleTimeString("ja-JP", {
-      timeZone: timezone,
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    timezone,
-  });
-
-  if (!discordResult.success) {
-    console.error(
-      `[SMALL_PARTY] Failed to update Discord message for recruit ${recruitId}:`,
-      discordResult.error.message,
-    );
-    return;
-  }
-
-  await db
-    .update(recruits)
-    .set({
-      status: "matched",
-      matchSignature: signature,
-      matchedMeetTimeUtc: meetTimeUtc,
-      matchedMemberIdsJson: JSON.stringify(memberIds),
-      smallPartyStatus: "confirmed",
-    })
-    .where(eq(recruits.id, recruitId));
-
-  await notifyMatchUpdate(env, recruit, previousMatch, nextMatch, timezone, triggeredBy);
 }
 
 type RecruitMatchSource = {

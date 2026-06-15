@@ -37,12 +37,9 @@ export const recruits = sqliteTable(
     lastNotifiedSignature: text("last_notified_signature"),
     matchedMeetTimeUtc: text("matched_meet_time_utc"),
     matchedMemberIdsJson: text("matched_member_ids_json"),
-    // 5人未満で成立する少人数(2〜3人)パーティ提案の状態。1募集につき1件のアクティブ提案を保持する。
-    smallPartyStatus: text("small_party_status"), // null | "proposed" | "confirmed"
+    // 少人数(2〜3人)パーティの「最後に通知した構成」。同一構成の重複通知抑制に使う。
     smallPartyMemberIdsJson: text("small_party_member_ids_json"),
     smallPartyMeetTimeUtc: text("small_party_meet_time_utc"),
-    smallPartyConsentJson: text("small_party_consent_json"), // 「行く」を押したユーザーIDの配列
-    smallPartyProposedAtUtc: text("small_party_proposed_at_utc"), // 提案対象スロット(UTC)。同一スロット重複提案の抑制に使う
     deletedBy: text("deleted_by"),
     deletedAtUtc: text("deleted_at_utc"),
   },

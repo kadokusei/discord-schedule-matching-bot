@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyConsent,
   buildSmallPartyProposal,
   formatRegisterNudge,
   formatSmallPartyProposal,
@@ -96,14 +95,27 @@ describe("buildSmallPartyProposal", () => {
 });
 
 describe("formatSmallPartyProposal", () => {
-  it("人数・集合時刻・メンバーを含む提案文を生成する", () => {
+  it("人数・集合時刻・メンバーを含む通知文を生成する（同意ボタンの文言は無い）", () => {
     const msg = formatSmallPartyProposal(["a", "b"], "2026-01-17T13:00:00.000Z", 2, "Asia/Tokyo");
 
     expect(msg).toContain("2人");
     expect(msg).toContain("22:00"); // JST
     expect(msg).toContain("<@a>");
     expect(msg).toContain("<@b>");
-    expect(msg).toContain("行く");
+    expect(msg).not.toContain("行く");
+  });
+
+  it("早く始められるサブ組が与えられれば併記する", () => {
+    const msg = formatSmallPartyProposal(
+      ["a", "b", "c"],
+      "2026-01-17T13:30:00.000Z",
+      3,
+      "Asia/Tokyo",
+      { memberIds: ["a", "b"], meetTimeUtc: "2026-01-17T13:00:00.000Z" },
+    );
+
+    expect(msg).toContain("早く始めるなら");
+    expect(msg).toContain("22:00"); // 早期サブ組の集合時刻(JST)
   });
 });
 
@@ -113,40 +125,5 @@ describe("formatRegisterNudge", () => {
     expect(msg).toContain("<@x>");
     expect(msg).toContain("<@y>");
     expect(msg).toContain("/riot add");
-  });
-});
-
-describe("applyConsent", () => {
-  const members = ["a", "b", "c"];
-
-  it("対象外ユーザーの押下は同意に反映されない", () => {
-    const result = applyConsent(members, [], "z");
-    expect(result.isMember).toBe(false);
-    expect(result.consent).toEqual([]);
-    expect(result.allConfirmed).toBe(false);
-  });
-
-  it("対象メンバーの押下を同意に追加する（一部）", () => {
-    const result = applyConsent(members, ["a"], "b");
-    expect(result.isMember).toBe(true);
-    expect(result.consent.sort()).toEqual(["a", "b"]);
-    expect(result.allConfirmed).toBe(false);
-  });
-
-  it("全員が同意したら allConfirmed が true", () => {
-    const result = applyConsent(members, ["a", "b"], "c");
-    expect(result.allConfirmed).toBe(true);
-    expect(result.consent.sort()).toEqual(["a", "b", "c"]);
-  });
-
-  it("重複押下しても同意は二重登録されない", () => {
-    const result = applyConsent(members, ["a", "b"], "a");
-    expect(result.consent.sort()).toEqual(["a", "b"]);
-    expect(result.allConfirmed).toBe(false);
-  });
-
-  it("メンバー外の残留IDは同意から除外される", () => {
-    const result = applyConsent(members, ["a", "stray"], "b");
-    expect(result.consent.sort()).toEqual(["a", "b"]);
   });
 });
