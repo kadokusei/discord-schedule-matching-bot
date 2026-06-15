@@ -116,7 +116,6 @@ export async function recomputeMatch(
 
   // 参加状況を計算
   const confirmedCount = entries.filter((entry) => entry.state === "confirmed").length;
-  const pendingCount = entries.filter((entry) => entry.state === "pending_time").length;
   const undecidedEntries = entries.filter((entry) => entry.state === "undecided");
   const undecidedCount = undecidedEntries.length;
 
@@ -132,10 +131,6 @@ export async function recomputeMatch(
       userId: entry.userId,
       availableFromUtc: entry.availableFromUtc,
     }));
-
-  const pendingUserIds = entries
-    .filter((entry) => entry.state === "pending_time")
-    .map((entry) => entry.userId);
 
   const undecidedUserIds = undecidedEntries.map((entry) => entry.userId);
 
@@ -202,10 +197,8 @@ export async function recomputeMatch(
       postTimeHHmm,
       status: "open",
       confirmedCount,
-      pendingCount,
       undecidedCount,
       confirmedUsers,
-      pendingUserIds,
       undecidedUserIds,
       timezone,
     });
@@ -243,10 +236,8 @@ export async function recomputeMatch(
     postTimeHHmm,
     status: "matched",
     confirmedCount,
-    pendingCount,
     undecidedCount,
     confirmedUsers,
-    pendingUserIds,
     undecidedUserIds,
     matchedMembers: bestParty.memberIds,
     matchedTime: new Date(bestParty.meetTimeUtc).toLocaleTimeString("ja-JP", {
@@ -344,7 +335,6 @@ export async function finalizeSmallParty(
     .all();
 
   const confirmedCount = entries.filter((e) => e.state === "confirmed").length;
-  const pendingCount = entries.filter((e) => e.state === "pending_time").length;
   const undecidedCount = entries.filter((e) => e.state === "undecided").length;
   const confirmedUsers = entries
     .filter(
@@ -352,7 +342,6 @@ export async function finalizeSmallParty(
         e.state === "confirmed" && e.availableFromUtc !== null,
     )
     .map((e) => ({ userId: e.userId, availableFromUtc: e.availableFromUtc }));
-  const pendingUserIds = entries.filter((e) => e.state === "pending_time").map((e) => e.userId);
   const undecidedUserIds = entries.filter((e) => e.state === "undecided").map((e) => e.userId);
 
   const previousMatch = buildMatchFromRecruit(recruit);
@@ -364,10 +353,8 @@ export async function finalizeSmallParty(
     postTimeHHmm,
     status: "matched",
     confirmedCount,
-    pendingCount,
     undecidedCount,
     confirmedUsers,
-    pendingUserIds,
     undecidedUserIds,
     matchedMembers: memberIds,
     matchedTime: new Date(meetTimeUtc).toLocaleTimeString("ja-JP", {

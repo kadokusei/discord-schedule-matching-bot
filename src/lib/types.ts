@@ -18,8 +18,7 @@ export interface WaitUntilContext {
 
 /**
  * recruit_entries.state の取りうる値。
- * - pending_time: 参加したが希望時間も「未定」も未選択（時間入力リマインドの対象）
  * - confirmed: 希望時間を選択済み（マッチング計算の対象）
  * - undecided: 「未定」を選択（通常リマインドはせず、人数充足時のみ通知）
  */
-export type RecruitEntryState = "pending_time" | "confirmed" | "undecided";
+export type RecruitEntryState = "confirmed" | "undecided";

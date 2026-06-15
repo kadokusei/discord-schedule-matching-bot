@@ -1,8 +1,7 @@
 export { diffMatch, formatNotification, matchSignature, mentionTargets } from "./notification";
 export type { Match, Diff } from "./notification";
 
-export { reminderSlotToSend, buildReminderMessage, buildUndecidedNudge } from "./reminder";
-export type { ReminderSlotParams } from "./reminder";
+export { buildUndecidedNudge } from "./reminder";
 
 export { shouldCreateInstance, currentIntervalSlotUtc } from "./scheduler";
 export type { Schedule, RecruitInstance, IntervalSchedule } from "./scheduler";

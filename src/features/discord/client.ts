@@ -71,10 +71,8 @@ export interface UpdateRecruitMessageParams {
   postTimeHHmm: string;
   status: "open" | "matched" | "cancelled" | "deleted";
   confirmedCount: number;
-  pendingCount: number;
   undecidedCount?: number;
   confirmedUsers?: { userId: string; availableFromUtc: string }[];
-  pendingUserIds?: string[];
   undecidedUserIds?: string[];
   matchedMembers?: string[];
   matchedTime?: string;
@@ -235,7 +233,6 @@ export async function postRecruitMessage(
     postTimeHHmm: params.postTimeHHmm,
     status: "open",
     confirmedCount: 0,
-    pendingCount: 0,
   });
 
   const timeOptions = buildTimeOptions(

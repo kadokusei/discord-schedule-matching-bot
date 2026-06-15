@@ -108,25 +108,13 @@ describe("recomputeMatch - filtering logic", () => {
   it("should filter entries by confirmed state", () => {
     const entries = [
       { state: "confirmed", availableFromUtc: "2026-01-18T12:00:00.000Z" },
-      { state: "pending_time", availableFromUtc: null },
+      { state: "undecided", availableFromUtc: null },
       { state: "cancelled", availableFromUtc: "2026-01-18T13:00:00.000Z" },
       { state: "confirmed", availableFromUtc: "2026-01-18T14:00:00.000Z" },
     ];
 
     const confirmedEntries = entries.filter((e) => e.state === "confirmed" && e.availableFromUtc);
     expect(confirmedEntries).toHaveLength(2);
-  });
-
-  it("should filter entries by pending_time state", () => {
-    const entries = [
-      { state: "confirmed", availableFromUtc: "2026-01-18T12:00:00.000Z" },
-      { state: "pending_time", availableFromUtc: null },
-      { state: "pending_time", availableFromUtc: null },
-      { state: "cancelled", availableFromUtc: "2026-01-18T13:00:00.000Z" },
-    ];
-
-    const pendingEntries = entries.filter((e) => e.state === "pending_time");
-    expect(pendingEntries).toHaveLength(2);
   });
 
   it("should filter entries to extract userId and availableFromUtc", () => {
@@ -136,7 +124,7 @@ describe("recomputeMatch - filtering logic", () => {
         state: "confirmed",
         availableFromUtc: "2026-01-18T12:00:00.000Z",
       },
-      { userId: "user2", state: "pending_time", availableFromUtc: null },
+      { userId: "user2", state: "undecided", availableFromUtc: null },
       {
         userId: "user3",
         state: "confirmed",
@@ -155,21 +143,5 @@ describe("recomputeMatch - filtering logic", () => {
       { userId: "user1", availableFromUtc: "2026-01-18T12:00:00.000Z" },
       { userId: "user3", availableFromUtc: "2026-01-18T13:00:00.000Z" },
     ]);
-  });
-
-  it("should extract userId for pending entries", () => {
-    const entries = [
-      {
-        userId: "user1",
-        state: "confirmed",
-        availableFromUtc: "2026-01-18T12:00:00.000Z",
-      },
-      { userId: "user2", state: "pending_time", availableFromUtc: null },
-      { userId: "user3", state: "pending_time", availableFromUtc: null },
-    ];
-
-    const pendingUserIds = entries.filter((e) => e.state === "pending_time").map((e) => e.userId);
-
-    expect(pendingUserIds).toEqual(["user2", "user3"]);
   });
 });

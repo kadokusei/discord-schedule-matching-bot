@@ -217,7 +217,6 @@ describe("Discord API Client", () => {
         postTimeHHmm: "20:00",
         status: "open",
         confirmedCount: 3,
-        pendingCount: 1,
       });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -250,7 +249,6 @@ describe("Discord API Client", () => {
         postTimeHHmm: "20:00",
         status: "matched",
         confirmedCount: 5,
-        pendingCount: 0,
         matchedMembers: ["user1", "user2", "user3", "user4", "user5"],
         matchedTime: "21:00",
         timezone: "Asia/Tokyo",
@@ -271,7 +269,6 @@ describe("Discord API Client", () => {
         postTimeHHmm: "20:00",
         status: "cancelled",
         confirmedCount: 0,
-        pendingCount: 0,
       });
 
       const callArgs = JSON.parse(getRequestBody(mockFetch));
@@ -289,7 +286,6 @@ describe("Discord API Client", () => {
         postTimeHHmm: "20:00",
         status: "deleted",
         confirmedCount: 0,
-        pendingCount: 0,
       });
 
       const callArgs = JSON.parse(getRequestBody(mockFetch));
@@ -306,7 +302,6 @@ describe("Discord API Client", () => {
         postTimeHHmm: "20:00",
         status: "open",
         confirmedCount: 1,
-        pendingCount: 0,
       });
 
       const callArgs = JSON.parse(getRequestBody(mockFetch));

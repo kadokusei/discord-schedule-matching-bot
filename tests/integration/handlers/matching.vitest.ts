@@ -78,11 +78,10 @@ describe("recomputeMatch - Integration Tests", () => {
   it("should keep status open when fewer than 5 confirmed entries", async () => {
     const { recruitId } = await setupBase();
 
-    // 3 confirmed, 1 pending
+    // 3 confirmed (5 人未満)
     await insertEntry(recruitId, "user1", "confirmed", "2026-01-18T11:00:00.000Z");
     await insertEntry(recruitId, "user2", "confirmed", "2026-01-18T11:30:00.000Z");
     await insertEntry(recruitId, "user3", "confirmed", "2026-01-18T12:00:00.000Z");
-    await insertEntry(recruitId, "user4", "pending_time", null);
 
     // Track fetch calls
     const calls: { url: string; method: string }[] = [];
