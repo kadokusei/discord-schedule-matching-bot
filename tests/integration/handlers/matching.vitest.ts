@@ -362,6 +362,75 @@ describe("recomputeMatch - Integration Tests", () => {
     expect(payload.allowed_mentions.users).not.toContain("user5");
   });
 
+  it("時刻のみ変更時は【更新】通知を1回だけ送り、取消通知は送らない", async () => {
+    const { recruitId } = await setupBase();
+
+    // 事前にマッチ済み状態（user1〜user5 が 20:00 JST = 11:00 UTC で確定）
+    const members = ["user1", "user2", "user3", "user4", "user5"];
+    const baseTime = "2026-01-18T11:00:00.000Z";
+    await db
+      .update(schema.recruits)
+      .set({
+        status: "matched",
+        matchedMeetTimeUtc: baseTime,
+        matchedMemberIdsJson: JSON.stringify(members),
+        lastNotifiedSignature: `${[...members].sort().join(",")}|${baseTime}`,
+      })
+      .where(eq(schema.recruits.id, recruitId));
+
+    // メンバーは不変のまま、user3 だけが時刻を 21:00 JST = 12:00 UTC に更新したケース。
+    // confirmed への直接 upsert により confirmed を抜けないため、取消(<5)→確定(=5) の
+    // 二重通知は発生せず、単一の【更新】通知のみとなることを保証する。
+    const updatedTime = "2026-01-18T12:00:00.000Z";
+    for (const id of members) {
+      await insertEntry(recruitId, id, "confirmed", id === "user3" ? updatedTime : baseTime);
+    }
+
+    const fetchCalls: { url: string; method: string; body?: string }[] = [];
+    const mockFetch = vi.fn((url: RequestInfo | URL, options?: RequestInit) => {
+      fetchCalls.push({
+        url: String(url),
+        method: options?.method ?? "GET",
+        body: options?.body?.toString(),
+      });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+        text: () => Promise.resolve(""),
+      } as Response);
+    });
+    globalThis.fetch = mockFetch as typeof globalThis.fetch;
+
+    await recomputeMatch(env, recruitId, "user3");
+
+    // 通知（POST /channels/.../messages）は正確に1件だけ
+    const notifications = fetchCalls.filter(
+      (c) => c.method === "POST" && c.url.includes("/channels/test-channel/messages"),
+    );
+    expect(notifications).toHaveLength(1);
+
+    const payload = JSON.parse(notifications[0]?.body ?? "{}") as {
+      content: string;
+      allowed_mentions: { users?: string[] };
+    };
+
+    // 【更新】通知のみで【取消】は含まない
+    expect(payload.content).toContain("【更新】");
+    expect(payload.content).not.toContain("【取消】");
+    // 集合時刻は最遅時刻（21:00 JST）へ更新される
+    expect(payload.content).toContain("🕘 集合時刻: 20:00 → 21:00");
+
+    // マッチは matched を維持
+    const recruit = await db
+      .select()
+      .from(schema.recruits)
+      .where(eq(schema.recruits.id, recruitId))
+      .get();
+    expect(recruit?.status).toBe("matched");
+    expect(recruit?.matchedMeetTimeUtc).toBe(updatedTime);
+  });
+
   describe("undecided nudge (人数充足リマインド)", () => {
     // postChannelMessage(POST /channels/.../messages) のうち、未定者宛て(本人 ping 1名)を抽出する
     const findNudge = (calls: { url: string; method: string; body: string }[], userId: string) =>
