@@ -87,13 +87,8 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
           {
             type: ApplicationCommandOptionType.String,
             name: "game_name",
-            description: "ゲーム名（#タグを含めることも可）",
+            description: "ゲーム名（名前#タグ 例: Player#JP1）",
             required: true,
-          },
-          {
-            type: ApplicationCommandOptionType.String,
-            name: "tag_line",
-            description: "タグライン（game_nameに#がない場合必須）",
           },
           {
             type: ApplicationCommandOptionType.String,
@@ -104,18 +99,15 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
       },
       {
         type: ApplicationCommandOptionType.Subcommand,
-        name: "remove",
+        name: "delete",
         description: "VALORANTアカウントを削除します",
         options: [
           {
             type: ApplicationCommandOptionType.String,
             name: "game_name",
-            description: "ゲーム名",
-          },
-          {
-            type: ApplicationCommandOptionType.String,
-            name: "tag_line",
-            description: "タグライン",
+            description: "削除するアカウント（候補から選択／「全て削除」も可）",
+            required: true,
+            autocomplete: true,
           },
         ],
       },

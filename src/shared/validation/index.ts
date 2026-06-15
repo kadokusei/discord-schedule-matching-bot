@@ -3,14 +3,14 @@ export {
   timezoneSchema,
   positiveNumberSchema,
   riotAccountAddOptionsSchema,
-  riotAccountRemoveOptionsSchema,
+  riotAccountDeleteOptionsSchema,
   recruitOptionsSchema,
   settingsOptionsSchema,
   scheduleDeleteOptionsSchema,
 } from "./schemas";
 export type {
   RiotAccountAddOptions,
-  RiotAccountRemoveOptions,
+  RiotAccountDeleteOptions,
   RecruitOptions,
   SettingsOptions,
   ScheduleDeleteOptions,
