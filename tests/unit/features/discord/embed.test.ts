@@ -193,3 +193,48 @@ describe("buildRecruitEmbed", () => {
     );
   });
 });
+
+describe("buildRecruitEmbed - earlierSubParty", () => {
+  const matchedBase: RecruitEmbedParams = {
+    targetDateLocal: "2026-01-18",
+    postTimeHHmm: "20:00",
+    status: "matched",
+    confirmedCount: 5,
+    matchedMembers: ["user1", "user2", "user3", "user4", "user5"],
+    matchedTime: "21:00",
+    timezone: "Asia/Tokyo",
+  };
+
+  it("earlierSubParty 指定時に『早く始めるなら』フィールドを出す", () => {
+    const result = buildRecruitEmbed({
+      ...matchedBase,
+      earlierSubParty: {
+        memberIds: ["user1", "user2", "user3"],
+        meetTimeUtc: "2026-01-18T11:00:00.000Z", // 20:00 JST
+      },
+    });
+    const field = result.embeds[0].fields?.find((f) => f.name === "早く始めるなら");
+    expect(field).toBeDefined();
+    expect(field?.value).toContain("20:00");
+    expect(field?.value).toContain("<@user1>");
+  });
+
+  it("earlierSubParty 未指定なら『早く始めるなら』フィールドは出さない", () => {
+    const result = buildRecruitEmbed(matchedBase);
+    expect(result.embeds[0].fields?.find((f) => f.name === "早く始めるなら")).toBeUndefined();
+  });
+
+  it("matched 以外では earlierSubParty を出さない", () => {
+    const result = buildRecruitEmbed({
+      targetDateLocal: "2026-01-18",
+      postTimeHHmm: "20:00",
+      status: "open",
+      confirmedCount: 3,
+      earlierSubParty: {
+        memberIds: ["user1", "user2"],
+        meetTimeUtc: "2026-01-18T11:00:00.000Z",
+      },
+    });
+    expect(result.embeds[0].fields?.find((f) => f.name === "早く始めるなら")).toBeUndefined();
+  });
+});

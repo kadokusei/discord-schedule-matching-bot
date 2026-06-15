@@ -13,9 +13,8 @@ export { isRecruitActive } from "./status";
 export type { RecruitStatus } from "./status";
 
 export {
-  applyConsent,
   buildSmallPartyProposal,
   formatSmallPartyProposal,
   formatRegisterNudge,
 } from "./small-party";
-export type { ConfirmedEntryInput, SmallPartyProposal, ConsentResult } from "./small-party";
+export type { ConfirmedEntryInput, SmallPartyProposal } from "./small-party";

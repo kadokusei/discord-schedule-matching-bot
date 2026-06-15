@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../src/db/schema";
 import { shouldCreateInstance } from "../../../src/features/recruit";
 import { handleScheduled } from "../../../src/handlers/scheduled";
@@ -376,6 +376,199 @@ describe("handleScheduled - Integration Tests", () => {
 
       // 予約行は削除され、孤児（messageId 空のまま）が残らない
       expect(created).toHaveLength(0);
+    });
+  });
+
+  describe("少人数パーティ通知（通知のみ）", () => {
+    const SP_CHANNEL = "sp-channel";
+    const AVAIL = "2026-01-18T11:00:00.000Z"; // 20:00 JST
+    const NOW = new Date("2026-01-18T11:30:00.000Z"); // 20:30 JST（スロット境界）
+
+    const cleanup = async () => {
+      await db.delete(schema.recruitEntries);
+      await db.delete(schema.recruits);
+      await db.delete(schema.schedules);
+      await db.delete(schema.guildSettings);
+      await db.delete(schema.riotAccounts);
+    };
+
+    const setupOpenRecruit = async (status: "open" | "matched" = "open") => {
+      await cleanup();
+      await db.insert(schema.guildSettings).values({
+        id: crypto.randomUUID(),
+        guildId: "sp-guild",
+        timezone: "Asia/Tokyo",
+        defaultIntervalMin: 30,
+        defaultDurationMin: 360,
+        defaultTemplate: "",
+      });
+      const scheduleId = crypto.randomUUID();
+      await db.insert(schema.schedules).values({
+        id: scheduleId,
+        guildId: "sp-guild",
+        channelId: SP_CHANNEL,
+        creatorId: "creator",
+        postTimeHHmm: "20:00",
+        intervalMin: 30,
+        durationMin: 360,
+        template: "",
+        active: 1,
+      });
+      const recruitId = crypto.randomUUID();
+      await db.insert(schema.recruits).values({
+        id: recruitId,
+        scheduleId,
+        guildId: "sp-guild",
+        channelId: SP_CHANNEL,
+        messageId: "sp-msg",
+        targetDateLocal: "2026-01-18",
+        status,
+      });
+      return recruitId;
+    };
+
+    const addConfirmed = async (
+      recruitId: string,
+      userId: string,
+      rank: string,
+      availableFromUtc = AVAIL,
+    ) => {
+      await db.insert(schema.recruitEntries).values({
+        recruitId,
+        userId,
+        state: "confirmed",
+        availableFromUtc,
+        createdAtUtc: "2026-01-18T10:00:00.000Z",
+        updatedAtUtc: "2026-01-18T10:00:00.000Z",
+      });
+      await db.insert(schema.riotAccounts).values({
+        id: crypto.randomUUID(),
+        userId,
+        gameName: `${userId}-name`,
+        tagLine: "JP1",
+        region: "ap",
+        rank: JSON.stringify({ tier: 0, division: 1, rank }),
+        createdAtUtc: "2026-01-18T10:00:00.000Z",
+        lastFetchedAtUtc: "2026-01-18T10:00:00.000Z",
+      });
+    };
+
+    const trackFetch = () => {
+      const calls: { url: string; method: string; body: string }[] = [];
+      const mockFetch = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({
+          url: String(url),
+          method: init?.method ?? "GET",
+          body: typeof init?.body === "string" ? init.body : "",
+        });
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ id: "sp-msg" }),
+          text: () => Promise.resolve(""),
+        } as Response);
+      });
+      globalThis.fetch = mockFetch as unknown as typeof fetch;
+      return calls;
+    };
+
+    // 少人数通知（"行けそう" を含む POST）を抽出
+    const notifications = (calls: { url: string; method: string; body: string }[]) =>
+      calls.filter(
+        (c) =>
+          c.method === "POST" &&
+          c.url.includes(`/channels/${SP_CHANNEL}/messages`) &&
+          c.body.includes("行けそう"),
+      );
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    it("ボタン無しで少人数通知を送る（同意コンポーネントを含まない）", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      const recruitId = await setupOpenRecruit();
+      await addConfirmed(recruitId, "a", "Gold 1");
+      await addConfirmed(recruitId, "b", "Gold 2");
+      await addConfirmed(recruitId, "c", "Gold 3");
+
+      const calls = trackFetch();
+      await handleScheduled(env);
+
+      const notifs = notifications(calls);
+      expect(notifs).toHaveLength(1);
+      const payload = JSON.parse(notifs[0].body) as { components?: unknown[]; content: string };
+      expect(payload.components ?? []).toHaveLength(0);
+      expect(payload.content).toContain("3人");
+    });
+
+    it("同一構成では再通知しない", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      const recruitId = await setupOpenRecruit();
+      await addConfirmed(recruitId, "a", "Gold 1");
+      await addConfirmed(recruitId, "b", "Gold 2");
+      await addConfirmed(recruitId, "c", "Gold 3");
+
+      const calls = trackFetch();
+      await handleScheduled(env);
+      await handleScheduled(env);
+
+      expect(notifications(calls)).toHaveLength(1);
+    });
+
+    it("人数が増えたら（より大きい構成で）再通知する", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      const recruitId = await setupOpenRecruit();
+      await addConfirmed(recruitId, "a", "Gold 1");
+      await addConfirmed(recruitId, "b", "Gold 2");
+
+      const calls = trackFetch();
+      await handleScheduled(env); // 2人で通知
+
+      await addConfirmed(recruitId, "c", "Gold 3");
+      await handleScheduled(env); // 3人で再通知
+
+      const notifs = notifications(calls);
+      expect(notifs).toHaveLength(2);
+      expect(notifs[0].body).toContain("2人");
+      expect(notifs[1].body).toContain("3人");
+    });
+
+    it("matched の募集には少人数通知を送らない", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      const recruitId = await setupOpenRecruit("matched");
+      await addConfirmed(recruitId, "a", "Gold 1");
+      await addConfirmed(recruitId, "b", "Gold 2");
+      await addConfirmed(recruitId, "c", "Gold 3");
+
+      const calls = trackFetch();
+      await handleScheduled(env);
+
+      expect(notifications(calls)).toHaveLength(0);
+    });
+
+    it("3人通知で、より早く始められる2人組があれば併記する", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      const recruitId = await setupOpenRecruit();
+      // a,b は 20:00(11:00Z)、c は 20:30(11:30Z)。3人集合は 20:30 だが a,b は 20:00 から行ける。
+      await addConfirmed(recruitId, "a", "Gold 1", "2026-01-18T11:00:00.000Z");
+      await addConfirmed(recruitId, "b", "Gold 2", "2026-01-18T11:00:00.000Z");
+      await addConfirmed(recruitId, "c", "Gold 3", "2026-01-18T11:30:00.000Z");
+
+      const calls = trackFetch();
+      await handleScheduled(env);
+
+      const notifs = notifications(calls);
+      expect(notifs).toHaveLength(1);
+      expect(notifs[0].body).toContain("3人");
+      expect(notifs[0].body).toContain("早く始めるなら");
+      expect(notifs[0].body).toContain("20:00"); // 早期2人組の集合時刻(JST)
     });
   });
 });

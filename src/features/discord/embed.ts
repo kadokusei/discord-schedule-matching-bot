@@ -8,6 +8,8 @@ export interface RecruitEmbedParams {
   undecidedUserIds?: string[];
   matchedMembers?: string[];
   matchedTime?: string;
+  /** 全員集合より早く始められるサブ組（あれば確定時に併記）。 */
+  earlierSubParty?: { memberIds: string[]; meetTimeUtc: string };
   timezone?: string;
 }
 
@@ -79,7 +81,23 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
         ]
       : [];
 
-  const finalFields = [...fields, ...matchedField];
+  const earlierSubPartyField =
+    params.status === "matched" &&
+    params.earlierSubParty &&
+    params.earlierSubParty.memberIds.length > 0
+      ? [
+          {
+            name: "早く始めるなら",
+            value: `集合時刻: ${new Date(params.earlierSubParty.meetTimeUtc).toLocaleTimeString(
+              "ja-JP",
+              { timeZone: params.timezone ?? "Asia/Tokyo", hour: "2-digit", minute: "2-digit" },
+            )}\nメンバー: ${params.earlierSubParty.memberIds.map((id) => `<@${id}>`).join(", ")}`,
+            inline: false,
+          },
+        ]
+      : [];
+
+  const finalFields = [...fields, ...matchedField, ...earlierSubPartyField];
 
   return {
     embeds: [

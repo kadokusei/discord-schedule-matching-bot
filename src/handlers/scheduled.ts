@@ -1,18 +1,15 @@
 import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { guildSettings, recruitEntries, recruits, riotAccounts, schedules } from "../db/schema";
-import {
-  postChannelMessage,
-  postRecruitMessage,
-  postSmallPartyProposal,
-  updateDiscordMessage,
-} from "../features/discord";
+import { postChannelMessage, postRecruitMessage, updateDiscordMessage } from "../features/discord";
+import { findEarliestSubParty } from "../features/matching";
 import {
   buildSmallPartyProposal,
   currentIntervalSlotUtc,
   formatRegisterNudge,
   formatSmallPartyProposal,
   isRecruitExpired,
+  matchSignature,
   shouldCreateInstance,
 } from "../features/recruit";
 import { rankStringFromStored } from "../features/riot";
@@ -24,8 +21,9 @@ type GuildSettingRow = typeof guildSettings.$inferSelect;
 
 /**
  * 各 open 募集について、interval スロット境界が到来していれば、その時刻までに参加可能な
- * 確定者から成立する 2〜3 人パーティを探し、候補メンバーへ同意ボタン付きの提案を投稿する。
- * 同一スロットでの重複提案は smallPartyProposedAtUtc で抑制する。
+ * 確定者から成立する 2〜3 人パーティを探し、候補メンバーへ「通知のみ」で案内する（同意ボタンは無い）。
+ * 人数が増えると構成が変わり再通知する。同一構成の重複通知は「最後に通知した構成のシグネチャ」で抑制する。
+ * 全員集合より早く始められるサブ組があれば、その早期開始も併記する。
  */
 async function proposeSmallParties(
   env: Env,
@@ -37,8 +35,6 @@ async function proposeSmallParties(
   const openRecruits = await db.select().from(recruits).where(eq(recruits.status, "open")).all();
 
   for (const recruit of openRecruits) {
-    if (recruit.smallPartyStatus === "confirmed") continue;
-
     const schedule = allSchedules.find((s) => s.id === recruit.scheduleId);
     if (!schedule) continue;
 
@@ -56,8 +52,6 @@ async function proposeSmallParties(
     );
 
     if (!slotUtc) continue;
-    // 同一スロットで既に提案済みなら抑制
-    if (recruit.smallPartyProposedAtUtc === slotUtc) continue;
 
     const entries = await db
       .select()
@@ -95,28 +89,50 @@ async function proposeSmallParties(
 
     const { party, unrankedUserIds } = proposal;
 
+    // 同一構成の重複通知を抑制（最後に通知した構成のシグネチャと比較）
+    const signature = matchSignature({
+      memberIds: party.memberIds,
+      meetTimeUtc: party.meetTimeUtc,
+    });
+    const lastSignature = recruit.smallPartyMemberIdsJson
+      ? matchSignature({
+          memberIds: JSON.parse(recruit.smallPartyMemberIdsJson) as string[],
+          meetTimeUtc: recruit.smallPartyMeetTimeUtc ?? "",
+        })
+      : null;
+    if (signature === lastSignature) continue;
+
+    // 3人提案なら、全員集合より早く始められる2〜3人のサブ組を探して併記する
+    const partyCandidates = confirmed
+      .filter((e) => party.memberIds.includes(e.userId))
+      .map((e) => ({ ...e, accountRanks: ranksByUser.get(e.userId) ?? [] }));
+    const earlier =
+      party.size === 3 ? findEarliestSubParty(partyCandidates, party.meetTimeUtc) : null;
+
     try {
-      await postSmallPartyProposal(
+      await postChannelMessage(
         env,
         recruit.channelId,
-        recruit.id,
-        formatSmallPartyProposal(party.memberIds, party.meetTimeUtc, party.size, tz),
-        party.memberIds,
+        formatSmallPartyProposal(
+          party.memberIds,
+          party.meetTimeUtc,
+          party.size,
+          tz,
+          earlier ? { memberIds: earlier.memberIds, meetTimeUtc: earlier.meetTimeUtc } : undefined,
+        ),
+        { users: party.memberIds },
       );
     } catch (error) {
-      console.error(`[SMALL_PARTY] Failed to post proposal for recruit ${recruit.id}:`, error);
+      console.error(`[SMALL_PARTY] Failed to post notification for recruit ${recruit.id}:`, error);
       continue;
     }
 
-    // 提案を保存（同意は空で開始、対象スロットを記録）
+    // 通知済み構成を保存（次回以降の重複抑制に使う）
     await db
       .update(recruits)
       .set({
-        smallPartyStatus: "proposed",
         smallPartyMemberIdsJson: JSON.stringify(party.memberIds),
         smallPartyMeetTimeUtc: party.meetTimeUtc,
-        smallPartyConsentJson: "[]",
-        smallPartyProposedAtUtc: slotUtc,
       })
       .where(eq(recruits.id, recruit.id));
 

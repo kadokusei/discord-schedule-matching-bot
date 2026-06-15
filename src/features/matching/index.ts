@@ -3,5 +3,5 @@ export type { Entry, BestParty } from "./algorithm";
 
 export { canQueueAsParty, majorTierOf, MAJOR_TIERS } from "./rank-restriction";
 
-export { findBestSmallParty } from "./small-party";
+export { findBestSmallParty, canUserJoinAnyParty, findEarliestSubParty } from "./small-party";
 export type { SmallPartyCandidate, SmallParty } from "./small-party";
