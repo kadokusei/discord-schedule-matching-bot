@@ -4,7 +4,7 @@ import {
   recruitOptionsSchema,
   regionSchema,
   riotAccountAddOptionsSchema,
-  riotAccountRemoveOptionsSchema,
+  riotAccountDeleteOptionsSchema,
   scheduleDeleteOptionsSchema,
   settingsOptionsSchema,
   timezoneSchema,
@@ -41,23 +41,20 @@ describe("validation", () => {
   });
 
   describe("riotAccountAddOptionsSchema", () => {
-    it("valid options", () => {
+    it("valid options (game_name に # を含む)", () => {
       const result = riotAccountAddOptionsSchema.parse({
-        game_name: "TestPlayer",
-        tag_line: "123",
+        game_name: "TestPlayer#123",
         region: "na",
       });
       expect(result).toEqual({
-        game_name: "TestPlayer",
-        tag_line: "123",
+        game_name: "TestPlayer#123",
         region: "na",
       });
     });
 
     it("default region", () => {
       const result = riotAccountAddOptionsSchema.parse({
-        game_name: "TestPlayer",
-        tag_line: "123",
+        game_name: "TestPlayer#123",
       });
       expect(result.region).toBe("ap");
     });
@@ -67,62 +64,49 @@ describe("validation", () => {
       expect(result.success).toBe(false);
     });
 
-    it("tag_line is optional when game_name contains #", () => {
-      const result = riotAccountAddOptionsSchema.parse({
-        game_name: "TestPlayer#123",
-      });
-      expect(result.game_name).toBe("TestPlayer#123");
-      expect(result.tag_line).toBeUndefined();
-    });
-
-    it("tag_line is required when game_name does not contain #", () => {
+    it("# を含まない game_name は失敗", () => {
       const result = riotAccountAddOptionsSchema.safeParse({
         game_name: "TestPlayer",
       });
       expect(result.success).toBe(false);
     });
 
+    it("# の前後が空の game_name は失敗", () => {
+      expect(riotAccountAddOptionsSchema.safeParse({ game_name: "TestPlayer#" }).success).toBe(
+        false,
+      );
+      expect(riotAccountAddOptionsSchema.safeParse({ game_name: "#123" }).success).toBe(false);
+    });
+
     it("invalid region", () => {
       const result = riotAccountAddOptionsSchema.safeParse({
-        game_name: "TestPlayer",
-        tag_line: "123",
+        game_name: "TestPlayer#123",
         region: "invalid",
       });
       expect(result.success).toBe(false);
     });
   });
 
-  describe("riotAccountRemoveOptionsSchema", () => {
-    it("both fields provided", () => {
-      const result = riotAccountRemoveOptionsSchema.parse({
-        game_name: "TestPlayer",
-        tag_line: "123",
+  describe("riotAccountDeleteOptionsSchema", () => {
+    it("game_name を指定で成功（名前#タグ）", () => {
+      const result = riotAccountDeleteOptionsSchema.parse({
+        game_name: "TestPlayer#123",
       });
-      expect(result).toEqual({
-        game_name: "TestPlayer",
-        tag_line: "123",
-      });
+      expect(result.game_name).toBe("TestPlayer#123");
     });
 
-    it("both fields omitted", () => {
-      const result = riotAccountRemoveOptionsSchema.parse({});
-      expect(result).toEqual({
-        game_name: undefined,
-        tag_line: undefined,
-      });
+    it("センチネル値（全て削除）も受け付ける", () => {
+      const result = riotAccountDeleteOptionsSchema.parse({ game_name: "__ALL__" });
+      expect(result.game_name).toBe("__ALL__");
     });
 
-    it("only game_name provided - should fail", () => {
-      const result = riotAccountRemoveOptionsSchema.safeParse({
-        game_name: "TestPlayer",
-      });
+    it("空文字は失敗", () => {
+      const result = riotAccountDeleteOptionsSchema.safeParse({ game_name: "" });
       expect(result.success).toBe(false);
     });
 
-    it("only tag_line provided - should fail", () => {
-      const result = riotAccountRemoveOptionsSchema.safeParse({
-        tag_line: "123",
-      });
+    it("未指定は失敗", () => {
+      const result = riotAccountDeleteOptionsSchema.safeParse({});
       expect(result.success).toBe(false);
     });
   });

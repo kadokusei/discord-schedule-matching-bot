@@ -69,16 +69,15 @@ const RIOT_HELP = [
   "🎮 **riot コマンドの使い方**",
   "",
   "▸ **/riot add** — VALORANTアカウントを追加します",
-  "　・game_name（必須）: ゲーム名（「名前#タグ」のように # を含めて指定も可）",
-  "　・tag_line（任意）: タグライン（game_name に # を含めない場合は必須）",
+  "　・game_name（必須）: ゲーム名（「名前#タグ」の形式）",
   "　・region（任意）: リージョン（ap / na / eu / kr / latam / br）",
   "　例) /riot add game_name:Player#JP1",
-  "　例) /riot add game_name:Player tag_line:JP1 region:ap",
+  "　例) /riot add game_name:Player#JP1 region:ap",
   "",
-  "▸ **/riot remove** — VALORANTアカウントを削除します",
-  "　・game_name（任意）/ tag_line（任意）: 両方指定でそのアカウントのみ削除",
-  "　※ 両方とも省略すると、登録済みの全アカウントを削除します。",
-  "　例) /riot remove game_name:Player tag_line:JP1",
+  "▸ **/riot delete** — VALORANTアカウントを削除します",
+  "　・game_name（必須）: 削除するアカウント（入力時に候補から選択できます）",
+  "　※ 候補の「全て削除」を選ぶと、登録済みの全アカウントを削除します。",
+  "　例) /riot delete game_name:Player#JP1",
   "",
   "▸ **/riot list** — 登録済みのVALORANTアカウントを一覧表示します",
   "　引数はありません。",
@@ -89,7 +88,14 @@ const RIOT_HELP = [
   "▸ **/riot help** — このヘルプを表示します",
 ].join("\n");
 
+/** /riot delete の「全て削除」候補に渡すセンチネル値（実 game_name と衝突しない値） */
+const DELETE_ALL_ACCOUNTS = "__ALL__";
+
 const getUserId = (interaction: APIApplicationCommandInteraction): string =>
+  interaction.member?.user?.id ?? interaction.user?.id ?? "";
+
+/** autocomplete インタラクションから userId を取り出す */
+const getAutocompleteUserId = (interaction: APIApplicationCommandAutocompleteInteraction): string =>
   interaction.member?.user?.id ?? interaction.user?.id ?? "";
 
 /** サブコマンドとそのオプションを取り出す */
@@ -130,7 +136,7 @@ export const handleCommandInteraction = async (
   if (data.name === "riot") {
     if (sub?.name === "help") return ephemeral(RIOT_HELP);
     if (sub?.name === "add") return handleRiotAccountAdd(interaction, sub.options, env, ctx);
-    if (sub?.name === "remove") return handleRiotAccountRemove(interaction, sub.options, env);
+    if (sub?.name === "delete") return handleRiotAccountDelete(interaction, sub.options, env);
     if (sub?.name === "list") return handleRiotAccountList(interaction, env);
     if (sub?.name === "refresh") return handleRiotAccountRefresh(interaction, env, ctx);
   }
@@ -138,7 +144,7 @@ export const handleCommandInteraction = async (
   return ephemeral("エラー: 不明なコマンドです");
 };
 
-/** APPLICATION_COMMAND_AUTOCOMPLETE のディスパッチ（/schedule delete の id 候補のみ提供） */
+/** APPLICATION_COMMAND_AUTOCOMPLETE のディスパッチ（/schedule delete・/riot delete の候補を提供） */
 export const handleAutocomplete = async (
   interaction: APIApplicationCommandAutocompleteInteraction,
   env: Env,
@@ -148,12 +154,34 @@ export const handleAutocomplete = async (
     data: { choices: [] },
   };
 
-  const guildId = interaction.guild_id;
   const data = interaction.data;
   const sub = data.options?.find((o) => o.type === ApplicationCommandOptionType.Subcommand);
 
-  if (data.name !== "schedule" || sub?.name !== "delete" || !guildId) {
+  if (sub?.name !== "delete") {
     return emptyResult;
+  }
+
+  if (data.name === "schedule") {
+    return scheduleDeleteAutocomplete(interaction, env);
+  }
+  if (data.name === "riot") {
+    return riotDeleteAutocomplete(interaction, env);
+  }
+
+  return emptyResult;
+};
+
+/** /schedule delete: ギルド内の定期予定を候補化（id を value に） */
+const scheduleDeleteAutocomplete = async (
+  interaction: APIApplicationCommandAutocompleteInteraction,
+  env: Env,
+): Promise<APIInteractionResponse> => {
+  const guildId = interaction.guild_id;
+  if (!guildId) {
+    return {
+      type: InteractionResponseType.ApplicationCommandAutocompleteResult,
+      data: { choices: [] },
+    };
   }
 
   const db = drizzle(env.DB, { schema });
@@ -168,6 +196,40 @@ export const handleAutocomplete = async (
     name: describeSchedule(s),
     value: s.id,
   }));
+
+  return {
+    type: InteractionResponseType.ApplicationCommandAutocompleteResult,
+    data: { choices },
+  };
+};
+
+/** /riot delete: 本人の登録アカウントを候補化。先頭に「全て削除」を置く。 */
+const riotDeleteAutocomplete = async (
+  interaction: APIApplicationCommandAutocompleteInteraction,
+  env: Env,
+): Promise<APIInteractionResponse> => {
+  const userId = getAutocompleteUserId(interaction);
+  if (!userId) {
+    return {
+      type: InteractionResponseType.ApplicationCommandAutocompleteResult,
+      data: { choices: [] },
+    };
+  }
+
+  const db = drizzle(env.DB, { schema });
+  const accounts = await db
+    .select()
+    .from(schema.riotAccounts)
+    .where(eq(schema.riotAccounts.userId, userId))
+    .all();
+
+  // 先頭の「全て削除」(センチネル) + 各アカウント(最大24件) で Discord 上限25件に収める
+  const accountChoices = accounts.slice(0, 24).map((acc) => ({
+    name: `${acc.gameName}#${acc.tagLine} (${formatStoredRank(acc.rank)})`,
+    value: `${acc.gameName}#${acc.tagLine}`,
+  }));
+
+  const choices = [{ name: "全て削除", value: DELETE_ALL_ACCOUNTS }, ...accountChoices];
 
   return {
     type: InteractionResponseType.ApplicationCommandAutocompleteResult,
@@ -374,12 +436,10 @@ const handleScheduleDelete = async (
   return ephemeral(`定期予定を削除しました: ${schedule.postTimeHHmm}`);
 };
 
-const parseGameName = (name: string, defaultTag?: string) => {
-  if (name.includes("#")) {
-    const [splitName, splitTag] = name.split("#");
-    return { gameName: splitName, tagLine: splitTag || defaultTag || "" };
-  }
-  return { gameName: name, tagLine: defaultTag || "" };
+/** 「名前#タグ」形式を gameName / tagLine に分解する（# が無い場合 tagLine は空文字） */
+const parseGameName = (name: string) => {
+  const [splitName, splitTag] = name.split("#");
+  return { gameName: splitName, tagLine: splitTag ?? "" };
 };
 
 const handleRiotAccountAdd = async (
@@ -399,14 +459,14 @@ const handleRiotAccountAdd = async (
     return ephemeral(parsed.error.issues[0].message);
   }
 
-  const { game_name, tag_line, region } = parsed.data;
+  const { game_name, region } = parsed.data;
 
   // HenrikDev API 呼び出しは3秒を超え得るため deferred 化し、結果は @original で反映
   ctx.waitUntil(
     (async () => {
       const content = await (async () => {
         try {
-          const { gameName, tagLine } = parseGameName(game_name, tag_line);
+          const { gameName, tagLine } = parseGameName(game_name);
           const db = drizzle(env.DB, { schema });
           const rankResult = await fetchValorantRankWithCache(
             gameName,
@@ -442,7 +502,7 @@ const handleRiotAccountAdd = async (
   return deferredEphemeral();
 };
 
-const handleRiotAccountRemove = async (
+const handleRiotAccountDelete = async (
   interaction: APIApplicationCommandInteraction,
   options: APIApplicationCommandInteractionDataOption[],
   env: Env,
@@ -453,31 +513,33 @@ const handleRiotAccountRemove = async (
     return ephemeral("エラー: user情報が不足しています");
   }
 
-  const parsed = v.riotAccountRemoveOptionsSchema.safeParse(optionsToObject(options));
+  const parsed = v.riotAccountDeleteOptionsSchema.safeParse(optionsToObject(options));
   if (!parsed.success) {
     return ephemeral(parsed.error.issues[0].message);
   }
 
-  const { game_name, tag_line } = parsed.data;
+  const { game_name } = parsed.data;
   const db = drizzle(env.DB, { schema });
 
-  if (game_name && tag_line) {
-    await db
-      .delete(schema.riotAccounts)
-      .where(
-        and(
-          eq(schema.riotAccounts.userId, userId),
-          eq(schema.riotAccounts.gameName, game_name),
-          eq(schema.riotAccounts.tagLine, tag_line),
-        ),
-      );
-
-    return ephemeral(`アカウントを削除しました: ${game_name}#${tag_line}`);
+  // 「全て削除」センチネルなら本人の全アカウントを削除
+  if (game_name === DELETE_ALL_ACCOUNTS) {
+    await db.delete(schema.riotAccounts).where(eq(schema.riotAccounts.userId, userId));
+    return ephemeral("全てのアカウントを削除しました");
   }
 
-  await db.delete(schema.riotAccounts).where(eq(schema.riotAccounts.userId, userId));
+  // それ以外は「名前#タグ」として個別削除
+  const { gameName, tagLine } = parseGameName(game_name);
+  await db
+    .delete(schema.riotAccounts)
+    .where(
+      and(
+        eq(schema.riotAccounts.userId, userId),
+        eq(schema.riotAccounts.gameName, gameName),
+        eq(schema.riotAccounts.tagLine, tagLine),
+      ),
+    );
 
-  return ephemeral("全てのアカウントを削除しました");
+  return ephemeral(`アカウントを削除しました: ${gameName}#${tagLine}`);
 };
 
 const handleRiotAccountList = async (

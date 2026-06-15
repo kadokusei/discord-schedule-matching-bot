@@ -24,27 +24,28 @@ export const positiveNumberSchema = z
   .positive("エラー: 正の数を指定してください");
 
 // --- スキーマ定義: Riotアカウント追加 ---
+// game_name は「名前#タグ」形式に統一。前後がともに非空であることを要求する。
 
-export const riotAccountAddOptionsSchema = z
-  .object({
-    game_name: z.string().min(1, { error: "エラー: game_nameは必須です" }),
-    tag_line: z.string().min(1, { error: "エラー: tag_lineは必須です" }).optional(),
-    region: regionSchema.default("ap"),
-  })
-  .refine((data) => data.game_name.includes("#") || data.tag_line !== undefined, {
-    error: "エラー: game_nameに#が含まれない場合、tag_lineは必須です",
-  });
+export const riotAccountAddOptionsSchema = z.object({
+  game_name: z
+    .string()
+    .min(1, { error: "エラー: game_nameは必須です" })
+    .refine(
+      (name) => {
+        const [namePart, tagPart] = name.split("#");
+        return name.includes("#") && namePart.length > 0 && tagPart.length > 0;
+      },
+      { error: "エラー: game_nameは「名前#タグ」の形式で指定してください（例: Player#JP1）" },
+    ),
+  region: regionSchema.default("ap"),
+});
 
 // --- スキーマ定義: Riotアカウント削除 ---
+// game_name は全削除センチネル、または「名前#タグ」形式を受け取る。
 
-export const riotAccountRemoveOptionsSchema = z
-  .object({
-    game_name: z.string().optional(),
-    tag_line: z.string().optional(),
-  })
-  .refine((data) => (data.game_name && data.tag_line) || (!data.game_name && !data.tag_line), {
-    error: "エラー: game_nameとtag_lineは両方指定するか、両方省略してください",
-  });
+export const riotAccountDeleteOptionsSchema = z.object({
+  game_name: z.string().min(1, { error: "エラー: 削除するアカウントを指定してください" }),
+});
 
 // --- スキーマ定義: 募集コマンド ---
 
@@ -71,7 +72,7 @@ export const scheduleDeleteOptionsSchema = z.object({
 // --- 型推論エクスポート ---
 
 export type RiotAccountAddOptions = z.infer<typeof riotAccountAddOptionsSchema>;
-export type RiotAccountRemoveOptions = z.infer<typeof riotAccountRemoveOptionsSchema>;
+export type RiotAccountDeleteOptions = z.infer<typeof riotAccountDeleteOptionsSchema>;
 export type RecruitOptions = z.infer<typeof recruitOptionsSchema>;
 export type SettingsOptions = z.infer<typeof settingsOptionsSchema>;
 export type ScheduleDeleteOptions = z.infer<typeof scheduleDeleteOptionsSchema>;

@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../src/db/schema";
-import { handleCommandInteraction } from "../../../src/handlers/commands";
+import { handleAutocomplete, handleCommandInteraction } from "../../../src/handlers/commands";
 
 type SubOption = { name: string; value: string | number; type?: number };
 
@@ -527,11 +527,160 @@ describe("Command Handlers - Integration Tests", () => {
       const content = data?.content ?? "";
       expect((data?.flags ?? 0) & 64).toBe(64);
       expect(content).toContain("add");
-      expect(content).toContain("remove");
+      expect(content).toContain("delete");
       expect(content).toContain("list");
 
       const accounts = await db.select().from(schema.riotAccounts).all();
       expect(accounts).toHaveLength(0);
+    });
+  });
+
+  describe("/riot delete", () => {
+    const insertAccount = (userId: string, gameName: string, tagLine: string) =>
+      db.insert(schema.riotAccounts).values({
+        id: crypto.randomUUID(),
+        userId,
+        gameName,
+        tagLine,
+        region: "ap",
+        rank: JSON.stringify({ tier: 10, division: "2", rank: "Gold 2" }),
+        createdAtUtc: new Date().toISOString(),
+        lastFetchedAtUtc: new Date().toISOString(),
+      });
+
+    it("should delete only the specified account (名前#タグ)", async () => {
+      const userId = "test-user";
+      await insertAccount(userId, "Player1", "123");
+      await insertAccount(userId, "Player2", "456");
+
+      const response = await dispatch(
+        buildCommandInteraction("riot", "delete", [{ name: "game_name", value: "Player1#123" }], {
+          userId,
+        }),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("Player1#123");
+
+      const remaining = await db
+        .select()
+        .from(schema.riotAccounts)
+        .where(eq(schema.riotAccounts.userId, userId))
+        .all();
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]?.gameName).toBe("Player2");
+    });
+
+    it("should delete all accounts with the sentinel value", async () => {
+      const userId = "test-user";
+      await insertAccount(userId, "Player1", "123");
+      await insertAccount(userId, "Player2", "456");
+
+      const response = await dispatch(
+        buildCommandInteraction("riot", "delete", [{ name: "game_name", value: "__ALL__" }], {
+          userId,
+        }),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain(
+        "全てのアカウントを削除しました",
+      );
+
+      const remaining = await db
+        .select()
+        .from(schema.riotAccounts)
+        .where(eq(schema.riotAccounts.userId, userId))
+        .all();
+      expect(remaining).toHaveLength(0);
+    });
+
+    it("should not delete accounts of other users", async () => {
+      await insertAccount("user1", "Player1", "123");
+      await insertAccount("user2", "Player1", "123");
+
+      await dispatch(
+        buildCommandInteraction("riot", "delete", [{ name: "game_name", value: "__ALL__" }], {
+          userId: "user1",
+        }),
+      );
+
+      const others = await db
+        .select()
+        .from(schema.riotAccounts)
+        .where(eq(schema.riotAccounts.userId, "user2"))
+        .all();
+      expect(others).toHaveLength(1);
+    });
+  });
+
+  describe("handleAutocomplete - /riot delete", () => {
+    const buildAutocompleteInteraction = (
+      commandName: string,
+      subName: string,
+      ctxIds: { userId?: string; guildId?: string } = {},
+    ) =>
+      ({
+        type: 4,
+        id: "interaction-id",
+        application_id: "test-app-id",
+        token: "interaction-token",
+        guild_id: ctxIds.guildId,
+        member: ctxIds.userId ? { user: { id: ctxIds.userId } } : undefined,
+        data: {
+          id: "cmd-id",
+          name: commandName,
+          type: 1,
+          options: [{ type: 1, name: subName, options: [] }],
+        },
+      }) as unknown as Parameters<typeof handleAutocomplete>[0];
+
+    it("should suggest 全て削除 first, then the user's accounts", async () => {
+      const userId = "test-user";
+      await db.insert(schema.riotAccounts).values({
+        id: crypto.randomUUID(),
+        userId,
+        gameName: "Player1",
+        tagLine: "123",
+        region: "ap",
+        rank: JSON.stringify({ tier: 10, division: "2", rank: "Gold 2" }),
+        createdAtUtc: new Date().toISOString(),
+        lastFetchedAtUtc: new Date().toISOString(),
+      });
+
+      const response = await handleAutocomplete(
+        buildAutocompleteInteraction("riot", "delete", { userId }),
+        env,
+      );
+
+      const choices =
+        (response as { data?: { choices?: { name: string; value: string }[] } }).data?.choices ??
+        [];
+      expect(choices[0]).toEqual({ name: "全て削除", value: "__ALL__" });
+      expect(choices).toContainEqual({ name: "Player1#123 (Gold 2)", value: "Player1#123" });
+    });
+
+    it("should only suggest the requesting user's accounts", async () => {
+      await db.insert(schema.riotAccounts).values({
+        id: crypto.randomUUID(),
+        userId: "other-user",
+        gameName: "OtherPlayer",
+        tagLine: "999",
+        region: "ap",
+        rank: JSON.stringify({ tier: 10, division: "2", rank: "Gold 2" }),
+        createdAtUtc: new Date().toISOString(),
+        lastFetchedAtUtc: new Date().toISOString(),
+      });
+
+      const response = await handleAutocomplete(
+        buildAutocompleteInteraction("riot", "delete", { userId: "test-user" }),
+        env,
+      );
+
+      const choices =
+        (response as { data?: { choices?: { name: string; value: string }[] } }).data?.choices ??
+        [];
+      // 全て削除のみ（他人のアカウントは含まれない）
+      expect(choices).toHaveLength(1);
+      expect(choices[0]?.value).toBe("__ALL__");
     });
   });
 });
