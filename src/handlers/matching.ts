@@ -14,12 +14,15 @@ import {
 } from "../features/matching";
 import {
   type Match,
+  buildSmallPartyProposal,
   buildUndecidedNudge,
+  currentIntervalSlotUtc,
   diffMatch,
   formatNotification,
   isRecruitActive,
   matchSignature,
   mentionTargets,
+  shouldRemindUndecided,
 } from "../features/recruit";
 import { rankStringFromStored } from "../features/riot";
 import type { Env } from "../lib/types";
@@ -91,6 +94,8 @@ export async function recomputeMatch(
     .get();
 
   const timezone = settings?.timezone ?? "Asia/Tokyo";
+  const reminderIntervalMin = settings?.reminderIntervalMin ?? 60;
+  const nowUtc = new Date();
 
   // 参加状況を計算
   const confirmedCount = entries.filter((entry) => entry.state === "confirmed").length;
@@ -142,7 +147,7 @@ export async function recomputeMatch(
     const fivePossible = confirmedCount + undecidedCount >= 5;
     const confirmedUserIds = confirmedUsers.map((u) => u.userId);
     for (const entry of undecidedEntries) {
-      if (entry.lastRemindedAtUtc !== null) continue;
+      if (!shouldRemindUndecided(entry.lastRemindedAtUtc, nowUtc, reminderIntervalMin)) continue;
       if (entry.userId === triggeredBy) continue;
       if (!fivePossible) {
         const targetRanks = ranksByUser.get(entry.userId) ?? [];
@@ -185,6 +190,38 @@ export async function recomputeMatch(
     );
 
   if (confirmedEntries.length < 5) {
+    // open 場面で編成候補を表示: cron の少人数提案(proposeSmallParties)と同一の関数チェーンで、
+    // 「今のスロットまでに集合可能」な最良2〜3人編成を算出する。
+    const slotUtc = schedule
+      ? currentIntervalSlotUtc(
+          { targetDateLocal: recruit.targetDateLocal },
+          {
+            postTimeHHmm: schedule.postTimeHHmm,
+            intervalMin: schedule.intervalMin,
+            durationMin: schedule.durationMin,
+          },
+          timezone,
+          nowUtc,
+        )
+      : null;
+
+    const formationCandidate = slotUtc
+      ? (() => {
+          const proposal = buildSmallPartyProposal(
+            confirmedEntries.map((e) => ({
+              userId: e.userId,
+              availableFromUtc: e.availableFromUtc,
+              createdAtUtc: e.createdAtUtc,
+            })),
+            ranksByUser,
+            slotUtc,
+          );
+          return proposal
+            ? { memberIds: proposal.party.memberIds, meetTimeUtc: proposal.party.meetTimeUtc }
+            : undefined;
+        })()
+      : undefined;
+
     // Discord更新を先に試みる
     const discordResult = await attemptDiscordUpdate(env, recruit.channelId, recruit.messageId, {
       targetDateLocal: recruit.targetDateLocal,
@@ -194,6 +231,7 @@ export async function recomputeMatch(
       undecidedCount,
       confirmedUsers,
       undecidedUserIds,
+      formationCandidate,
       timezone,
     });
 

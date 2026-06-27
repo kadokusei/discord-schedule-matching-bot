@@ -77,6 +77,8 @@ export interface UpdateRecruitMessageParams {
   matchedMembers?: string[];
   matchedTime?: string;
   earlierSubParty?: { memberIds: string[]; meetTimeUtc: string };
+  /** open 状態かつ2〜4人確定時に、今のスロットまでに集合可能な最良編成候補。 */
+  formationCandidate?: { memberIds: string[]; meetTimeUtc: string };
   timezone?: string;
 }
 

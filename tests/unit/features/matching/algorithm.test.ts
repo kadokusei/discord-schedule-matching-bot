@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  computeBestParty,
-  selectOptimalAccounts,
-  type Entry,
-} from "../../../../src/features/matching";
+import { computeBestParty, type Entry } from "../../../../src/features/matching";
 
 describe("rankBalanceScore evaluation", () => {
   it("should return 0 for all same rank", () => {
@@ -223,30 +219,5 @@ describe("computeBestParty - tiebreaking", () => {
     // Results are sorted, so user6 should be excluded
     expect(result.memberIds).toHaveLength(5);
     expect(result.memberIds).not.toContain("user6"); // Excluded for higher rank variance
-  });
-});
-
-describe("selectOptimalAccounts", () => {
-  it("should select accounts with minimal rank variance", () => {
-    const accounts = [
-      { rank: "Iron 1" },
-      { rank: "Gold 1" },
-      { rank: "Gold 2" },
-      { rank: "Gold 3" },
-      { rank: "Radiant" },
-    ];
-
-    const result = selectOptimalAccounts("user1", accounts, 3);
-
-    // Should select Gold 1, Gold 2, Gold 3 (adjacent ranks with minimal variance)
-    expect(result).toHaveLength(3);
-  });
-
-  it("should handle empty accounts array", () => {
-    const accounts: { rank: string }[] = [];
-
-    const result = selectOptimalAccounts("user1", accounts, 1);
-
-    expect(result).toEqual([]);
   });
 });

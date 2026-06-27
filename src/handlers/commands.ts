@@ -51,8 +51,9 @@ const SCHEDULE_HELP = [
   "　例) /schedule create post_time:20:00 interval:60 duration:180",
   "",
   "▸ **/schedule settings** — サーバー設定を変更します",
-  "　・timezone（必須）: タイムゾーン 例: Asia/Tokyo",
-  "　例) /schedule settings timezone:Asia/Tokyo",
+  "　・timezone（任意）: タイムゾーン 例: Asia/Tokyo",
+  "　・reminder_interval（任意）: 未定者へのリマインド間隔（分）例: 60",
+  "　例) /schedule settings timezone:Asia/Tokyo reminder_interval:60",
   "",
   "▸ **/schedule list** — 登録済みの定期予定を一覧表示します",
   "　引数はありません。",
@@ -311,23 +312,22 @@ const handleScheduleSettings = async (
   if (!parsed.success) {
     return ephemeral(parsed.error.issues[0].message);
   }
-
-  const { timezone } = parsed.data;
+  const { timezone, reminder_interval } = parsed.data;
   const db = drizzle(env.DB, { schema });
+
+  const set: { timezone?: string; reminderIntervalMin?: number } = {};
+  if (timezone) set.timezone = timezone;
+  if (reminder_interval) set.reminderIntervalMin = reminder_interval;
 
   await db
     .insert(schema.guildSettings)
-    .values({
-      id: crypto.randomUUID(),
-      guildId,
-      timezone,
-    })
-    .onConflictDoUpdate({
-      target: schema.guildSettings.guildId,
-      set: { timezone },
-    });
+    .values({ id: crypto.randomUUID(), guildId, ...set })
+    .onConflictDoUpdate({ target: schema.guildSettings.guildId, set });
 
-  return ephemeral(`タイムゾーンを ${timezone} に設定しました`);
+  const parts: string[] = [];
+  if (timezone) parts.push(`タイムゾーン ${timezone}`);
+  if (reminder_interval) parts.push(`リマインド間隔 ${reminder_interval}分`);
+  return ephemeral(`設定を更新しました: ${parts.join("、")}`);
 };
 
 /** 定期予定の説明文（一覧・オートコンプリート共通）。active=0 は停止中として明示。 */

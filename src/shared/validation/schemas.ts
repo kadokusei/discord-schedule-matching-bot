@@ -59,9 +59,14 @@ export const recruitOptionsSchema = z.object({
 
 // --- スキーマ定義: 設定コマンド ---
 
-export const settingsOptionsSchema = z.object({
-  timezone: timezoneSchema,
-});
+export const settingsOptionsSchema = z
+  .object({
+    timezone: timezoneSchema.optional(),
+    reminder_interval: z.coerce.number().int().positive().optional(),
+  })
+  .refine((d) => d.timezone !== undefined || d.reminder_interval !== undefined, {
+    error: "エラー: タイムゾーンまたはリマインド間隔を指定してください",
+  });
 
 // --- スキーマ定義: 定期予定の削除コマンド ---
 
