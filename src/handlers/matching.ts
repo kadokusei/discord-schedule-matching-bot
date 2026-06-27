@@ -20,6 +20,7 @@ import {
   isRecruitActive,
   matchSignature,
   mentionTargets,
+  shouldRemindUndecided,
 } from "../features/recruit";
 import { rankStringFromStored } from "../features/riot";
 import type { Env } from "../lib/types";
@@ -91,6 +92,8 @@ export async function recomputeMatch(
     .get();
 
   const timezone = settings?.timezone ?? "Asia/Tokyo";
+  const reminderIntervalMin = settings?.reminderIntervalMin ?? 60;
+  const nowUtc = new Date();
 
   // 参加状況を計算
   const confirmedCount = entries.filter((entry) => entry.state === "confirmed").length;
@@ -142,7 +145,7 @@ export async function recomputeMatch(
     const fivePossible = confirmedCount + undecidedCount >= 5;
     const confirmedUserIds = confirmedUsers.map((u) => u.userId);
     for (const entry of undecidedEntries) {
-      if (entry.lastRemindedAtUtc !== null) continue;
+      if (!shouldRemindUndecided(entry.lastRemindedAtUtc, nowUtc, reminderIntervalMin)) continue;
       if (entry.userId === triggeredBy) continue;
       if (!fivePossible) {
         const targetRanks = ranksByUser.get(entry.userId) ?? [];

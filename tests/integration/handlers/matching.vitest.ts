@@ -551,9 +551,12 @@ describe("recomputeMatch - Integration Tests", () => {
       expect(findNudge(calls, "userU")).toBeFalsy();
     });
 
-    it("does NOT re-notify an undecided user already reminded", async () => {
+    it("間隔内(前回リマインドから intervalMin 未満)は再送しない", async () => {
       const { recruitId } = await setupBase();
       await insertEntry(recruitId, "userC", "confirmed", "2026-01-18T11:00:00.000Z");
+      // ランク差制限は満たす（少人数局面なのでランク必須）。間隔のみを変数化するため。
+      await insertRiotAccount("userC", "Gold 1");
+      await insertRiotAccount("userU", "Gold 2");
       // 既にリマインド済み
       await db.insert(schema.recruitEntries).values({
         recruitId,
@@ -562,13 +565,36 @@ describe("recomputeMatch - Integration Tests", () => {
         availableFromUtc: null,
         createdAtUtc: "2026-01-18T10:00:00.000Z",
         updatedAtUtc: "2026-01-18T10:00:00.000Z",
-        lastRemindedAtUtc: "2026-01-18T10:30:00.000Z",
+        lastRemindedAtUtc: new Date(Date.now() - 5 * 60_000).toISOString(),
       });
 
       const calls = trackFetch();
       await recomputeMatch(env, recruitId);
 
       expect(findNudge(calls, "userU")).toBeFalsy();
+    });
+
+    it("間隔経過後(前回リマインドから intervalMin 以上)は再送する", async () => {
+      const { recruitId } = await setupBase();
+      await insertEntry(recruitId, "userC", "confirmed", "2026-01-18T11:00:00.000Z");
+      // ランク差制限は満たす。間隔のみを変数化するため。
+      await insertRiotAccount("userC", "Gold 1");
+      await insertRiotAccount("userU", "Gold 2");
+      // 90分前にリマインド済み（デフォルト間隔60分を超過）
+      await db.insert(schema.recruitEntries).values({
+        recruitId,
+        userId: "userU",
+        state: "undecided",
+        availableFromUtc: null,
+        createdAtUtc: "2026-01-18T10:00:00.000Z",
+        updatedAtUtc: "2026-01-18T10:00:00.000Z",
+        lastRemindedAtUtc: new Date(Date.now() - 90 * 60_000).toISOString(),
+      });
+
+      const calls = trackFetch();
+      await recomputeMatch(env, recruitId);
+
+      expect(findNudge(calls, "userU")).toBeTruthy();
     });
 
     it("シナリオ: 5人確定後に1人が未定へ変更すると open に戻る。本人トリガでは本人へ nudge を送らないが、別メンバーの動きでは送る", async () => {

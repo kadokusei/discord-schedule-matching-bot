@@ -264,5 +264,31 @@ describe("validation", () => {
       });
       expect(result4.success).toBe(false);
     });
+
+    it("should accept reminder_interval alone", () => {
+      const result = settingsOptionsSchema.safeParse({ reminder_interval: 60 });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.reminder_interval).toBe(60);
+      }
+    });
+
+    it("should accept both timezone and reminder_interval", () => {
+      const result = settingsOptionsSchema.safeParse({
+        timezone: "Asia/Tokyo",
+        reminder_interval: 90,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should reject empty object (neither field provided)", () => {
+      const result = settingsOptionsSchema.safeParse({});
+      expect(result.success).toBe(false);
+    });
+
+    it("should reject non-positive reminder_interval", () => {
+      expect(settingsOptionsSchema.safeParse({ reminder_interval: 0 }).success).toBe(false);
+      expect(settingsOptionsSchema.safeParse({ reminder_interval: -1 }).success).toBe(false);
+    });
   });
 });

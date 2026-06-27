@@ -232,6 +232,48 @@ describe("Command Handlers - Integration Tests", () => {
 
       expect(settings?.timezone).toBe("UTC");
     });
+
+    it("should update reminder_interval alone", async () => {
+      await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "settings",
+          [{ name: "reminder_interval", value: 60, type: 4 }],
+          { guildId: "test-guild" },
+        ),
+      );
+
+      const settings = await db
+        .select()
+        .from(schema.guildSettings)
+        .where(eq(schema.guildSettings.guildId, "test-guild"))
+        .get();
+
+      expect(settings?.reminderIntervalMin).toBe(60);
+    });
+
+    it("should update both timezone and reminder_interval", async () => {
+      await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "settings",
+          [
+            { name: "timezone", value: "Asia/Tokyo" },
+            { name: "reminder_interval", value: 90, type: 4 },
+          ],
+          { guildId: "test-guild" },
+        ),
+      );
+
+      const settings = await db
+        .select()
+        .from(schema.guildSettings)
+        .where(eq(schema.guildSettings.guildId, "test-guild"))
+        .get();
+
+      expect(settings?.timezone).toBe("Asia/Tokyo");
+      expect(settings?.reminderIntervalMin).toBe(90);
+    });
   });
 
   describe("/schedule list", () => {
