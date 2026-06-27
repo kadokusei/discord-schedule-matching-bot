@@ -10,6 +10,8 @@ export interface RecruitEmbedParams {
   matchedTime?: string;
   /** 全員集合より早く始められるサブ組（あれば確定時に併記）。 */
   earlierSubParty?: { memberIds: string[]; meetTimeUtc: string };
+  /** open 状態かつ2〜4人確定時に、今のスロットまでに集合可能な最良編成候補。 */
+  formationCandidate?: { memberIds: string[]; meetTimeUtc: string };
   timezone?: string;
 }
 
@@ -97,7 +99,20 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
         ]
       : [];
 
-  const finalFields = [...fields, ...matchedField, ...earlierSubPartyField];
+  const formationField =
+    params.status === "open" &&
+    params.formationCandidate &&
+    params.formationCandidate.memberIds.length > 0
+      ? [
+          {
+            name: "編成候補",
+            value: `集合時刻: ${new Date(params.formationCandidate.meetTimeUtc).toLocaleTimeString("ja-JP", { timeZone: params.timezone ?? "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}\nメンバー: ${params.formationCandidate.memberIds.map((id) => `<@${id}>`).join(", ")}`,
+            inline: false,
+          },
+        ]
+      : [];
+
+  const finalFields = [...fields, ...matchedField, ...earlierSubPartyField, ...formationField];
 
   return {
     embeds: [

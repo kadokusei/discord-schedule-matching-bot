@@ -14,7 +14,9 @@ import {
 } from "../features/matching";
 import {
   type Match,
+  buildSmallPartyProposal,
   buildUndecidedNudge,
+  currentIntervalSlotUtc,
   diffMatch,
   formatNotification,
   isRecruitActive,
@@ -188,6 +190,38 @@ export async function recomputeMatch(
     );
 
   if (confirmedEntries.length < 5) {
+    // open 場面で編成候補を表示: cron の少人数提案(proposeSmallParties)と同一の関数チェーンで、
+    // 「今のスロットまでに集合可能」な最良2〜3人編成を算出する。
+    const slotUtc = schedule
+      ? currentIntervalSlotUtc(
+          { targetDateLocal: recruit.targetDateLocal },
+          {
+            postTimeHHmm: schedule.postTimeHHmm,
+            intervalMin: schedule.intervalMin,
+            durationMin: schedule.durationMin,
+          },
+          timezone,
+          nowUtc,
+        )
+      : null;
+
+    const formationCandidate = slotUtc
+      ? (() => {
+          const proposal = buildSmallPartyProposal(
+            confirmedEntries.map((e) => ({
+              userId: e.userId,
+              availableFromUtc: e.availableFromUtc,
+              createdAtUtc: e.createdAtUtc,
+            })),
+            ranksByUser,
+            slotUtc,
+          );
+          return proposal
+            ? { memberIds: proposal.party.memberIds, meetTimeUtc: proposal.party.meetTimeUtc }
+            : undefined;
+        })()
+      : undefined;
+
     // Discord更新を先に試みる
     const discordResult = await attemptDiscordUpdate(env, recruit.channelId, recruit.messageId, {
       targetDateLocal: recruit.targetDateLocal,
@@ -197,6 +231,7 @@ export async function recomputeMatch(
       undecidedCount,
       confirmedUsers,
       undecidedUserIds,
+      formationCandidate,
       timezone,
     });
 
