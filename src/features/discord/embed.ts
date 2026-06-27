@@ -1,11 +1,15 @@
+import { type PartySizePreference, partySizePreferenceLabel } from "../../features/recruit";
+
 export interface RecruitEmbedParams {
   targetDateLocal: string;
   postTimeHHmm: string;
   status: "open" | "matched" | "cancelled" | "deleted";
   confirmedCount: number;
-  undecidedCount?: number;
-  confirmedUsers?: { userId: string; availableFromUtc: string }[];
-  undecidedUserIds?: string[];
+  confirmedUsers?: {
+    userId: string;
+    availableFromUtc: string;
+    partySizePreference: PartySizePreference;
+  }[];
   matchedMembers?: string[];
   matchedTime?: string;
   /** 全員集合より早く始められるサブ組（あれば確定時に併記）。 */
@@ -16,7 +20,11 @@ export interface RecruitEmbedParams {
 }
 
 function formatConfirmedUsers(
-  users: { userId: string; availableFromUtc: string }[],
+  users: {
+    userId: string;
+    availableFromUtc: string;
+    partySizePreference: PartySizePreference;
+  }[],
   timezone?: string,
 ): string {
   if (users.length === 0) return "";
@@ -28,15 +36,9 @@ function formatConfirmedUsers(
         hour: "2-digit",
         minute: "2-digit",
       });
-      return `<@${user.userId}> (${time})`;
+      return `<@${user.userId}> (${time} / ${partySizePreferenceLabel(user.partySizePreference)})`;
     })
     .join(" ");
-}
-
-function formatUndecidedUsers(userIds: string[]): string {
-  if (userIds.length === 0) return "";
-
-  return userIds.map((id) => `<@${id}> (未定)`).join(" ");
 }
 
 export function buildRecruitEmbed(params: RecruitEmbedParams) {
@@ -57,12 +59,8 @@ export function buildRecruitEmbed(params: RecruitEmbedParams) {
     params.confirmedUsers && params.confirmedUsers.length > 0
       ? `\n${formatConfirmedUsers(params.confirmedUsers, params.timezone)}`
       : "";
-  const undecidedUsersPart =
-    params.undecidedUserIds && params.undecidedUserIds.length > 0
-      ? `\n${formatUndecidedUsers(params.undecidedUserIds)}`
-      : "";
 
-  const statusValue = `確定: ${params.confirmedCount}人${confirmedUsersPart}\n未定: ${params.undecidedCount ?? 0}人${undecidedUsersPart}`;
+  const statusValue = `参加: ${params.confirmedCount}人${confirmedUsersPart}`;
 
   const fields: { name: string; value: string; inline: boolean }[] = [
     {

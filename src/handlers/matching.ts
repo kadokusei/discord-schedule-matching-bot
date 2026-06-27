@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { guildSettings, recruitEntries, recruits, riotAccounts, schedules } from "../db/schema";
 import {
@@ -6,28 +6,26 @@ import {
   postChannelMessage,
   updateDiscordMessage,
 } from "../features/discord";
-import {
-  type Entry,
-  canUserJoinAnyParty,
-  computeBestParty,
-  findEarliestSubParty,
-} from "../features/matching";
+import { type Entry, computeBestParty, findEarliestSubParty } from "../features/matching";
 import {
   type Match,
+  type PartySizePreference,
+  allowsFullParty,
+  allowsSmallParty,
   buildSmallPartyProposal,
-  buildUndecidedNudge,
   currentIntervalSlotUtc,
   diffMatch,
   formatNotification,
   isRecruitActive,
   matchSignature,
   mentionTargets,
-  shouldRemindUndecided,
 } from "../features/recruit";
 import { rankStringFromStored } from "../features/riot";
 import type { Env } from "../lib/types";
 
 type DiscordUpdateResult = { success: true } | { success: false; error: Error };
+/** recomputeMatch 内部の参加エントリ。algorithm の Entry に希望パーティサイズを載せる。 */
+type RecruitEntryInput = Entry & { partySizePreference: PartySizePreference };
 
 const attemptDiscordUpdate = async (
   env: Env,
@@ -94,30 +92,18 @@ export async function recomputeMatch(
     .get();
 
   const timezone = settings?.timezone ?? "Asia/Tokyo";
-  const reminderIntervalMin = settings?.reminderIntervalMin ?? 60;
   const nowUtc = new Date();
 
-  // 参加状況を計算
-  const confirmedCount = entries.filter((entry) => entry.state === "confirmed").length;
-  const undecidedEntries = entries.filter((entry) => entry.state === "undecided");
-  const undecidedCount = undecidedEntries.length;
+  // 参加状況を計算（参加行 = 希望時間あり）
+  const confirmedCount = entries.length;
 
-  const confirmedUsers = entries
-    .filter(
-      (
-        entry,
-      ): entry is typeof entry & {
-        availableFromUtc: NonNullable<typeof entry.availableFromUtc>;
-      } => entry.state === "confirmed" && entry.availableFromUtc !== null,
-    )
-    .map((entry) => ({
-      userId: entry.userId,
-      availableFromUtc: entry.availableFromUtc,
-    }));
+  const confirmedUsers = entries.map((entry) => ({
+    userId: entry.userId,
+    availableFromUtc: entry.availableFromUtc,
+    partySizePreference: entry.partySizePreference as PartySizePreference,
+  }));
 
-  const undecidedUserIds = undecidedEntries.map((entry) => entry.userId);
-
-  // 各ユーザーのランク情報を取得（nudge のランク適合判定とマッチ計算の両方で使う）
+  // 各ユーザーのランク情報を取得（マッチ計算と少人数判定の両方で使う）
   const userIds = entries.map((e) => e.userId);
   const riotAccountList = await db
     .select()
@@ -137,59 +123,22 @@ export async function recomputeMatch(
     }
   }
 
-  // 「未定」者への人数充足リマインド: 確定者＋未定者が少人数の下限(2)に達したら、
-  // 未送信(lastRemindedAtUtc === null)の未定者へ 1 回だけ時間確定を促す。
-  // ただし本人が自分のアクション（未定への変更など）でトリガした recompute では本人へ送らない。
-  // また「実際にパーティへ入れる未定者」だけに送る:
-  //   - 5人(フルマッチ)に届きうる(confirmed+undecided>=5)ならランク差/アカウント不問
-  //   - そうでなければ少人数でランク差制限を満たして組める未定者のみ(canUserJoinAnyParty)
-  if (confirmedCount + undecidedCount >= 2) {
-    const fivePossible = confirmedCount + undecidedCount >= 5;
-    const confirmedUserIds = confirmedUsers.map((u) => u.userId);
-    for (const entry of undecidedEntries) {
-      if (!shouldRemindUndecided(entry.lastRemindedAtUtc, nowUtc, reminderIntervalMin)) continue;
-      if (entry.userId === triggeredBy) continue;
-      if (!fivePossible) {
-        const targetRanks = ranksByUser.get(entry.userId) ?? [];
-        const otherRanks = confirmedUserIds.map((id) => ranksByUser.get(id) ?? []);
-        if (!canUserJoinAnyParty(targetRanks, otherRanks)) continue;
-      }
-      try {
-        await postChannelMessage(
-          env,
-          recruit.channelId,
-          `<@${entry.userId}> ${buildUndecidedNudge()}`,
-          { users: [entry.userId] },
-        );
-        await db
-          .update(recruitEntries)
-          .set({ lastRemindedAtUtc: new Date().toISOString() })
-          .where(
-            and(eq(recruitEntries.recruitId, recruitId), eq(recruitEntries.userId, entry.userId)),
-          );
-      } catch (error) {
-        console.error(
-          `[UNDECIDED_NUDGE] Failed to notify user ${entry.userId} in recruit ${recruitId}:`,
-          error,
-        );
-      }
-    }
-  }
-
   const previousMatch = buildMatchFromRecruit(recruit);
 
-  const confirmedEntries = entries
-    .filter((entry) => entry.state === "confirmed" && entry.availableFromUtc)
-    .map(
-      (entry): Entry => ({
-        userId: entry.userId,
-        availableFromUtc: entry.availableFromUtc ?? "",
-        rank: userRanks.get(entry.userId),
-        createdAtUtc: entry.createdAtUtc,
-      }),
-    );
+  const confirmedEntries: RecruitEntryInput[] = entries.map((entry) => ({
+    userId: entry.userId,
+    availableFromUtc: entry.availableFromUtc,
+    rank: userRanks.get(entry.userId),
+    createdAtUtc: entry.createdAtUtc,
+    partySizePreference: entry.partySizePreference as PartySizePreference,
+  }));
 
-  if (confirmedEntries.length < 5) {
+  // 5 人フルマッチ対象（"up_to_trio" はフルマッチに入らない）
+  const fullPartyEntries = confirmedEntries.filter((entry) =>
+    allowsFullParty(entry.partySizePreference),
+  );
+
+  if (fullPartyEntries.length < 5) {
     // open 場面で編成候補を表示: cron の少人数提案(proposeSmallParties)と同一の関数チェーンで、
     // 「今のスロットまでに集合可能」な最良2〜3人編成を算出する。
     const slotUtc = schedule
@@ -212,6 +161,7 @@ export async function recomputeMatch(
               userId: e.userId,
               availableFromUtc: e.availableFromUtc,
               createdAtUtc: e.createdAtUtc,
+              partySizePreference: e.partySizePreference,
             })),
             ranksByUser,
             slotUtc,
@@ -228,9 +178,7 @@ export async function recomputeMatch(
       postTimeHHmm,
       status: "open",
       confirmedCount,
-      undecidedCount,
       confirmedUsers,
-      undecidedUserIds,
       formationCandidate,
       timezone,
     });
@@ -259,14 +207,15 @@ export async function recomputeMatch(
     return;
   }
 
-  const bestParty = computeBestParty(confirmedEntries);
+  const bestParty = computeBestParty(fullPartyEntries);
   const signature = matchSignature(bestParty);
 
-  // 全員集合(最遅時刻)より早く始められる、ランク条件を満たす2〜3人のサブ組を探して併記する
+  // 全員集合(最遅時刻)より早く始められる、ランク条件を満たす2〜3人のサブ組を探して併記する。
+  // 「早く始めるなら」候補は希望パーティサイズが "any"（少人数 OK）のメンバーのみ。"full_party" は外す。
   const partyMemberSet = new Set(bestParty.memberIds);
   const earlierSubParty = findEarliestSubParty(
     confirmedEntries
-      .filter((e) => partyMemberSet.has(e.userId))
+      .filter((e) => partyMemberSet.has(e.userId) && allowsSmallParty(e.partySizePreference))
       .map((e) => ({
         userId: e.userId,
         availableFromUtc: e.availableFromUtc,
@@ -282,9 +231,7 @@ export async function recomputeMatch(
     postTimeHHmm,
     status: "matched",
     confirmedCount,
-    undecidedCount,
     confirmedUsers,
-    undecidedUserIds,
     matchedMembers: bestParty.memberIds,
     matchedTime: new Date(bestParty.meetTimeUtc).toLocaleTimeString("ja-JP", {
       timeZone: timezone,

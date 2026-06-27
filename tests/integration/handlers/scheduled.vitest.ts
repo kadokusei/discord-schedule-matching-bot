@@ -432,12 +432,13 @@ describe("handleScheduled - Integration Tests", () => {
       userId: string,
       rank: string,
       availableFromUtc = AVAIL,
+      partySizePreference: "any" | "full_party" | "up_to_trio" = "any",
     ) => {
       await db.insert(schema.recruitEntries).values({
         recruitId,
         userId,
-        state: "confirmed",
         availableFromUtc,
+        partySizePreference,
         createdAtUtc: "2026-01-18T10:00:00.000Z",
         updatedAtUtc: "2026-01-18T10:00:00.000Z",
       });
@@ -569,6 +570,26 @@ describe("handleScheduled - Integration Tests", () => {
       expect(notifs[0].body).toContain("3人");
       expect(notifs[0].body).toContain("早く始めるなら");
       expect(notifs[0].body).toContain("20:00"); // 早期2人組の集合時刻(JST)
+    });
+
+    it("希望パーティサイズ full_party の参加者は少人数通知の対象にしない", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      const recruitId = await setupOpenRecruit();
+      // a,b は full_party（少人数提案対象外）、c,d は any
+      await addConfirmed(recruitId, "a", "Gold 1", AVAIL, "full_party");
+      await addConfirmed(recruitId, "b", "Gold 2", AVAIL, "full_party");
+      await addConfirmed(recruitId, "c", "Gold 3");
+      await addConfirmed(recruitId, "d", "Gold 1");
+
+      const calls = trackFetch();
+      await handleScheduled(env);
+
+      const notifs = notifications(calls);
+      expect(notifs).toHaveLength(1);
+      // full_party の a,b は含まれず、c,d の2人通知になる
+      expect(notifs[0].body).toContain("2人");
+      expect(notifs[0].body).not.toContain("<@a>");
     });
   });
 });

@@ -1,7 +1,14 @@
 export { diffMatch, formatNotification, matchSignature, mentionTargets } from "./notification";
 export type { Match, Diff } from "./notification";
 
-export { buildUndecidedNudge, shouldRemindUndecided } from "./reminder";
+export {
+  PARTY_SIZE_PREFERENCES,
+  isPartySizePreference,
+  allowsFullParty,
+  allowsSmallParty,
+  partySizePreferenceLabel,
+} from "./party-size";
+export type { PartySizePreference } from "./party-size";
 
 export { shouldCreateInstance, currentIntervalSlotUtc } from "./scheduler";
 export type { Schedule, RecruitInstance, IntervalSchedule } from "./scheduler";

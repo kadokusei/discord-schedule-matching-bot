@@ -4,12 +4,14 @@ import {
   findBestSmallParty,
   majorTierOf,
 } from "../matching";
+import { type PartySizePreference, allowsSmallParty } from "./party-size";
 import { utcToLocalHHmm } from "./notification";
 
 export interface ConfirmedEntryInput {
   userId: string;
   availableFromUtc: string;
   createdAtUtc: string;
+  partySizePreference: PartySizePreference;
 }
 
 export interface SmallPartyProposal {
@@ -33,7 +35,10 @@ export function buildSmallPartyProposal(
   slotUtc: string,
 ): SmallPartyProposal | null {
   const slotMs = new Date(slotUtc).getTime();
-  const available = confirmed.filter((e) => new Date(e.availableFromUtc).getTime() <= slotMs);
+  const available = confirmed.filter(
+    (e) =>
+      allowsSmallParty(e.partySizePreference) && new Date(e.availableFromUtc).getTime() <= slotMs,
+  );
 
   if (available.length < 2) return null;
 

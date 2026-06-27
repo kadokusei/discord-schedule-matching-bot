@@ -51,9 +51,8 @@ const SCHEDULE_HELP = [
   "　例) /schedule create post_time:20:00 interval:60 duration:180",
   "",
   "▸ **/schedule settings** — サーバー設定を変更します",
-  "　・timezone（任意）: タイムゾーン 例: Asia/Tokyo",
-  "　・reminder_interval（任意）: 未定者へのリマインド間隔（分）例: 60",
-  "　例) /schedule settings timezone:Asia/Tokyo reminder_interval:60",
+  "　・timezone（必須）: タイムゾーン 例: Asia/Tokyo",
+  "　例) /schedule settings timezone:Asia/Tokyo",
   "",
   "▸ **/schedule list** — 登録済みの定期予定を一覧表示します",
   "　引数はありません。",
@@ -271,12 +270,12 @@ const handleScheduleCreate = async (
   const resolvedDuration = duration ?? settings?.defaultDurationMin ?? 360;
   const resolvedTemplate = settings?.defaultTemplate ?? "";
 
-  // 時間選択メニュー（StringSelect）は時間スロット + 「未定」1件で構成され、合計は Discord 上限(25)以内に収める。
-  // 時間スロット数が 24 を超える設定は作成させない。
-  const menuOptionCount = timeOptionCount(resolvedInterval, resolvedDuration) + 1;
-  if (menuOptionCount > MAX_TIME_OPTIONS) {
+  // Modal の available_time は HH:mm 入力で候補を一意に解決するため、
+  // 入力候補（= 時間スロット数）が HH:mm 衝突しない 24 個以内に収まるようにする。
+  const timeSlotCount = timeOptionCount(resolvedInterval, resolvedDuration);
+  if (timeSlotCount > MAX_TIME_OPTIONS - 1) {
     return ephemeral(
-      `エラー: 時間の選択肢が多すぎます（間隔 ${resolvedInterval}分 / 期間 ${resolvedDuration}分 → 「未定」を含め ${menuOptionCount}個）。選択肢は「未定」を含め ${MAX_TIME_OPTIONS}個までです。間隔を広げるか期間を短くしてください。`,
+      `エラー: 時間の入力候補が多すぎます（間隔 ${resolvedInterval}分 / 期間 ${resolvedDuration}分 → ${timeSlotCount}個）。入力候補は ${MAX_TIME_OPTIONS - 1}個までです。間隔を広げるか期間を短くしてください。`,
     );
   }
 
@@ -312,22 +311,18 @@ const handleScheduleSettings = async (
   if (!parsed.success) {
     return ephemeral(parsed.error.issues[0].message);
   }
-  const { timezone, reminder_interval } = parsed.data;
+  const { timezone } = parsed.data;
   const db = drizzle(env.DB, { schema });
-
-  const set: { timezone?: string; reminderIntervalMin?: number } = {};
-  if (timezone) set.timezone = timezone;
-  if (reminder_interval) set.reminderIntervalMin = reminder_interval;
 
   await db
     .insert(schema.guildSettings)
-    .values({ id: crypto.randomUUID(), guildId, ...set })
-    .onConflictDoUpdate({ target: schema.guildSettings.guildId, set });
+    .values({ id: crypto.randomUUID(), guildId, timezone })
+    .onConflictDoUpdate({
+      target: schema.guildSettings.guildId,
+      set: { timezone },
+    });
 
-  const parts: string[] = [];
-  if (timezone) parts.push(`タイムゾーン ${timezone}`);
-  if (reminder_interval) parts.push(`リマインド間隔 ${reminder_interval}分`);
-  return ephemeral(`設定を更新しました: ${parts.join("、")}`);
+  return ephemeral(`設定を更新しました: タイムゾーン ${timezone}`);
 };
 
 /** 定期予定の説明文（一覧・オートコンプリート共通）。active=0 は停止中として明示。 */

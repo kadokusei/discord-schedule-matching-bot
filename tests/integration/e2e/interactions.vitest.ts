@@ -87,13 +87,13 @@ describe("E2E: interaction routing through app.fetch", () => {
     expect(body.data?.content).toBe("登録されているアカウントはありません");
   });
 
-  it("routes recruit:time component (colon-delimited custom_id) to a deferred ephemeral response", async () => {
-    const response = await post(componentPayload("recruit:time:some-recruit-id"));
+  it("routes recruit:register component to a Modal response", async () => {
+    const response = await post(componentPayload("recruit:register:some-recruit-id"));
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { type: number; data?: { flags?: number } };
-    // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE + EPHEMERAL
-    expect(body.type).toBe(5);
-    expect(body.data?.flags).toBe(64);
+    const body = (await response.json()) as { type: number; data?: { custom_id?: string } };
+    // MODAL (InteractionResponseType.Modal = 9)
+    expect(body.type).toBe(9);
+    expect(body.data?.custom_id).toBe("recruit:register-modal:some-recruit-id");
   });
 
   it("routes recruit:cancel component to a deferred ephemeral response", async () => {

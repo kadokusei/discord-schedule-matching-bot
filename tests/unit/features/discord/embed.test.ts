@@ -14,7 +14,7 @@ describe("formatConfirmedUsers (via buildRecruitEmbed)", () => {
     };
     const result = buildRecruitEmbed(params);
     const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
-    expect(statusField?.value).toContain("確定: 0人");
+    expect(statusField?.value).toContain("参加: 0人");
     expect(statusField?.value).not.toContain("<@");
   });
 
@@ -25,8 +25,16 @@ describe("formatConfirmedUsers (via buildRecruitEmbed)", () => {
       status: "open",
       confirmedCount: 2,
       confirmedUsers: [
-        { userId: "user1", availableFromUtc: "2026-01-18T12:00:00.000Z" },
-        { userId: "user2", availableFromUtc: "2026-01-18T13:00:00.000Z" },
+        {
+          userId: "user1",
+          availableFromUtc: "2026-01-18T12:00:00.000Z",
+          partySizePreference: "any",
+        },
+        {
+          userId: "user2",
+          availableFromUtc: "2026-01-18T13:00:00.000Z",
+          partySizePreference: "full_party",
+        },
       ],
       timezone: "Asia/Tokyo",
     };
@@ -142,33 +150,23 @@ describe("buildRecruitEmbed", () => {
       ...baseParams,
       confirmedCount: 2,
       confirmedUsers: [
-        { userId: "user1", availableFromUtc: "2026-01-18T21:00:00.000Z" },
-        { userId: "user2", availableFromUtc: "2026-01-18T21:30:00.000Z" },
+        {
+          userId: "user1",
+          availableFromUtc: "2026-01-18T12:00:00.000Z",
+          partySizePreference: "full_party",
+        },
+        {
+          userId: "user2",
+          availableFromUtc: "2026-01-18T12:30:00.000Z",
+          partySizePreference: "up_to_trio",
+        },
       ],
     };
     const result = buildRecruitEmbed(params);
     const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
-    expect(statusField?.value).toContain("<@user1>");
-    expect(statusField?.value).toContain("<@user2>");
-  });
-
-  it("should show undecided count (defaults to 0 when omitted)", () => {
-    const result = buildRecruitEmbed(baseParams);
-    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
-    expect(statusField?.value).toContain("未定: 0人");
-  });
-
-  it("should include undecided users when provided", () => {
-    const params: RecruitEmbedParams = {
-      ...baseParams,
-      undecidedCount: 2,
-      undecidedUserIds: ["user5", "user6"],
-    };
-    const result = buildRecruitEmbed(params);
-    const statusField = result.embeds[0].fields?.find((f) => f.name === "参加状況");
-    expect(statusField?.value).toContain("未定: 2人");
-    expect(statusField?.value).toContain("<@user5> (未定)");
-    expect(statusField?.value).toContain("<@user6> (未定)");
+    expect(statusField?.value).toContain("<@user1> (21:00 / フルパ)");
+    expect(statusField?.value).toContain("<@user2> (21:30 / トリオまで)");
+    expect(statusField?.value).not.toContain("未定");
   });
 
   it("should include matching result when matched", () => {

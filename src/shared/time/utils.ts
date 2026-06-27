@@ -6,9 +6,6 @@ export interface TimeOption {
 /** StringSelect の選択肢上限（Discord API 制約）。 */
 export const MAX_TIME_OPTIONS = 25;
 
-/** 時間選択セレクトで「未定」を表す value。時間スロット(ISO8601)と区別する固定値。 */
-export const UNDECIDED_VALUE = "undecided";
-
 /** 時間選択メニューの選択肢数（= buildTimeOptions が生成する件数）を算出する。 */
 export function timeOptionCount(intervalMin: number, durationMin: number): number {
   return Math.floor(durationMin / intervalMin) + 1;
