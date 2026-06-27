@@ -1,10 +1,16 @@
 import { env } from "cloudflare:test";
-import type { APIMessageComponentInteraction } from "discord-api-types/v10";
+import type {
+  APIMessageComponentInteraction,
+  APIModalSubmitInteraction,
+} from "discord-api-types/v10";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../src/db/schema";
-import { handleComponentInteraction } from "../../../src/handlers/components";
+import {
+  handleComponentInteraction,
+  handleModalSubmitInteraction,
+} from "../../../src/handlers/components";
 import { buildMatchFromRecruit } from "../../../src/handlers/matching";
 
 describe("Component Interaction Handlers - Unit Tests", () => {
@@ -258,7 +264,7 @@ const contentOf = (body: unknown): string => {
   return "";
 };
 
-describe("登録・更新 select draft フロー", () => {
+describe("登録・更新 Modal フロー", () => {
   const db = drizzle(env.DB, { schema });
 
   // editOriginalInteractionResponse(@original) の PATCH 本文を捕捉するモック
@@ -286,25 +292,23 @@ describe("登録・更新 select draft フロー", () => {
         promises.push(p);
       },
     };
-    const response = handleComponentInteraction(interaction, env, ctx);
+    const response = await handleComponentInteraction(interaction, env, ctx);
     await Promise.all(promises);
     return response;
   };
 
-  // string select の interaction（component_type 3, values）
-  const selectPayload = (
-    customId: string,
-    value: string,
-    userId = "clicker",
-  ): APIMessageComponentInteraction =>
-    ({
-      type: 3,
-      id: "i",
-      application_id: "test-app-id",
-      token: "tok",
-      member: { user: { id: userId } },
-      data: { custom_id: customId, component_type: 3, values: [value] },
-    }) as unknown as APIMessageComponentInteraction;
+  // waitUntil の本処理を待ち合わせて modal submit を実行する
+  const runModalSubmit = async (interaction: APIModalSubmitInteraction) => {
+    const promises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        promises.push(p);
+      },
+    };
+    const response = handleModalSubmitInteraction(interaction, env, ctx);
+    await Promise.all(promises);
+    return response;
+  };
 
   // button の interaction（component_type 2）
   const buttonPayload = (customId: string, userId = "clicker"): APIMessageComponentInteraction =>
@@ -316,6 +320,34 @@ describe("登録・更新 select draft フロー", () => {
       member: { user: { id: userId } },
       data: { custom_id: customId, component_type: 2 },
     }) as unknown as APIMessageComponentInteraction;
+
+  // modal submit の interaction（希望パーティサイズ・希望時間とも string select の values）
+  const modalSubmitPayload = (
+    customId: string,
+    partySize: string,
+    availableTime: string,
+    userId = "clicker",
+  ): APIModalSubmitInteraction =>
+    ({
+      type: 5,
+      id: "i",
+      application_id: "test-app-id",
+      token: "tok",
+      member: { user: { id: userId } },
+      data: {
+        custom_id: customId,
+        components: [
+          {
+            type: 18,
+            component: { type: 3, custom_id: "party_size_preference", values: [partySize] },
+          },
+          {
+            type: 18,
+            component: { type: 3, custom_id: "available_time", values: [availableTime] },
+          },
+        ],
+      },
+    }) as unknown as APIModalSubmitInteraction;
 
   const insertSchedule = () =>
     db.insert(schema.schedules).values({
@@ -360,23 +392,10 @@ describe("登録・更新 select draft フロー", () => {
       )
       .get();
 
-  const getDraft = (recruitId: string) =>
-    db
-      .select()
-      .from(schema.recruitEntryDrafts)
-      .where(
-        and(
-          eq(schema.recruitEntryDrafts.recruitId, recruitId),
-          eq(schema.recruitEntryDrafts.userId, "clicker"),
-        ),
-      )
-      .get();
-
   // 20:00 JST = 11:00 UTC（buildTimeOptions の先頭候補）
   const FIRST_SLOT_UTC = "2026-06-15T11:00:00.000Z";
 
   beforeEach(async () => {
-    await db.delete(schema.recruitEntryDrafts);
     await db.delete(schema.recruitEntries);
     await db.delete(schema.recruits);
     await db.delete(schema.schedules);
@@ -387,140 +406,119 @@ describe("登録・更新 select draft フロー", () => {
     vi.clearAllMocks();
   });
 
-  it("recruit:register ボタンは Modal ではなく deferred ephemeral を返す", async () => {
+  it("recruit:register ボタンは Modal(type 9)を返し、パーティサイズ select と時間 select を含む", async () => {
     captureFetch();
     await insertSettings();
     await insertSchedule();
     await insertRecruit("rec-open", "open");
 
     const response = await runComponent(buttonPayload("recruit:register:rec-open"));
-    // type 5 = DeferredChannelMessageWithSource、flags 64 = Ephemeral
-    expect(response.type).toBe(5);
-    expect((response as { data?: { flags?: number } }).data?.flags).toBe(64);
+
+    expect(response.type).toBe(9);
+    if (response.type !== 9) throw new Error("expected modal response");
+    // discord-api-types は Label(type 18) を型付けしないため、応答 data を Modal 構造へ名前付きキャスト
+    const data = response.data as {
+      custom_id: string;
+      components: { type: number; component: { custom_id: string; options?: unknown[] } }[];
+    };
+    expect(data.custom_id).toBe("recruit:register-modal:rec-open");
+
+    const sizeSelect = data.components.find(
+      (c) => c.component.custom_id === "party_size_preference",
+    );
+    expect(sizeSelect?.component.options).toHaveLength(3);
+
+    // 希望時間 select は buildTimeOptions 件数（360/30 + 1 = 13）
+    const timeSelect = data.components.find((c) => c.component.custom_id === "available_time");
+    expect(timeSelect?.component.options).toHaveLength(13);
   });
 
-  it("party_size select は draft の partySizePreference だけを保存し、確定参加は作らない", async () => {
+  it("終端状態(closed)の募集の register ボタンは Modal ではなく ephemeral エラー(type 4)", async () => {
     captureFetch();
     await insertSettings();
     await insertSchedule();
-    await insertRecruit("rec-ps", "open");
+    await insertRecruit("rec-closedbtn", "closed");
 
-    await runComponent(selectPayload("recruit:party_size:rec-ps", "up_to_trio"));
-
-    const draft = await getDraft("rec-ps");
-    expect(draft?.partySizePreference).toBe("up_to_trio");
-    expect(draft?.availableFromUtc).toBeNull();
-    expect(await getEntry("rec-ps")).toBeUndefined();
+    const response = await runComponent(buttonPayload("recruit:register:rec-closedbtn"));
+    expect(response.type).toBe(4);
+    expect((response as { data?: { content?: string } }).data?.content).toContain("終了");
   });
 
-  it("time select は draft の availableFromUtc だけを保存し、確定参加は作らない", async () => {
-    captureFetch();
-    await insertSettings();
-    await insertSchedule();
-    await insertRecruit("rec-time", "open");
-
-    await runComponent(selectPayload("recruit:time:rec-time", FIRST_SLOT_UTC));
-
-    const draft = await getDraft("rec-time");
-    expect(draft?.availableFromUtc).toBe(FIRST_SLOT_UTC);
-    expect(draft?.partySizePreference).toBeNull();
-    expect(await getEntry("rec-time")).toBeUndefined();
-  });
-
-  it("両方選択後の register button で確定参加を作り draft を削除する", async () => {
+  it("modal submit で希望時間と希望パーティサイズを recruit_entries に登録する", async () => {
     const calls = captureFetch();
     await insertSettings();
     await insertSchedule();
     await insertRecruit("rec-reg", "open");
 
-    await runComponent(selectPayload("recruit:party_size:rec-reg", "up_to_trio"));
-    await runComponent(selectPayload("recruit:time:rec-reg", FIRST_SLOT_UTC));
-    const response = await runComponent(buttonPayload("recruit:register:rec-reg"));
+    const response = await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-reg", "up_to_trio", FIRST_SLOT_UTC),
+    );
     expect(response.type).toBe(5);
 
     const entry = await getEntry("rec-reg");
     expect(entry?.availableFromUtc).toBe(FIRST_SLOT_UTC);
     expect(entry?.partySizePreference).toBe("up_to_trio");
-    // 確定後に draft は削除されている
-    expect(await getDraft("rec-reg")).toBeUndefined();
 
-    // register button の応答は最後の @original 編集
-    const original = calls.filter((c) => c.url.includes("/messages/@original")).at(-1);
+    const original = calls.find((c) => c.url.includes("/messages/@original"));
     expect(contentOf(original?.body)).toContain("希望時間を登録しました");
     expect(contentOf(original?.body)).toContain("トリオまで");
   });
 
-  it("片方未選択（時間のみ）の register button は確定参加を作らない", async () => {
-    captureFetch();
-    await insertSettings();
-    await insertSchedule();
-    await insertRecruit("rec-half", "open");
-
-    await runComponent(selectPayload("recruit:time:rec-half", FIRST_SLOT_UTC));
-    await runComponent(buttonPayload("recruit:register:rec-half"));
-
-    expect(await getEntry("rec-half")).toBeUndefined();
-    // 時間 draft は残る
-    expect((await getDraft("rec-half"))?.availableFromUtc).toBe(FIRST_SLOT_UTC);
-  });
-
-  it("無効な party size の select は draft を作らない", async () => {
+  it("無効な party size の modal submit は登録せずエラーを返す", async () => {
     captureFetch();
     await insertSettings();
     await insertSchedule();
     await insertRecruit("rec-badps", "open");
 
-    await runComponent(selectPayload("recruit:party_size:rec-badps", "invalid"));
+    await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-badps", "", FIRST_SLOT_UTC),
+    );
 
-    expect(await getDraft("rec-badps")).toBeUndefined();
     expect(await getEntry("rec-badps")).toBeUndefined();
   });
 
-  it("募集時間外の time value の select は draft を作らない", async () => {
+  it("募集時間外の time value の modal submit は登録せずエラーを返す", async () => {
     captureFetch();
     await insertSettings();
     await insertSchedule();
     await insertRecruit("rec-oob", "open");
 
-    await runComponent(selectPayload("recruit:time:rec-oob", "2026-06-15T03:00:00.000Z"));
+    await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-oob", "any", "2026-06-15T03:00:00.000Z"),
+    );
 
-    expect(await getDraft("rec-oob")).toBeUndefined();
     expect(await getEntry("rec-oob")).toBeUndefined();
   });
 
-  it("終端状態(closed)の募集への select は DB を変更しない", async () => {
+  it("終端状態(closed)の募集への modal submit は DB を変更しない", async () => {
     const calls = captureFetch();
     await insertSettings();
     await insertSchedule();
     await insertRecruit("rec-closed", "closed");
 
-    await runComponent(selectPayload("recruit:party_size:rec-closed", "any"));
+    await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-closed", "any", FIRST_SLOT_UTC),
+    );
 
-    expect(await getDraft("rec-closed")).toBeUndefined();
     expect(await getEntry("rec-closed")).toBeUndefined();
     const original = calls.find((c) => c.url.includes("/messages/@original"));
     expect(contentOf(original?.body)).toContain("終了");
   });
 
-  it("cancel は確定参加と draft の両方を削除する", async () => {
+  it("cancel は確定参加を削除する", async () => {
     captureFetch();
     await insertSettings();
     await insertSchedule();
     await insertRecruit("rec-cancel", "open");
 
-    // 確定参加を作成
-    await runComponent(selectPayload("recruit:party_size:rec-cancel", "any"));
-    await runComponent(selectPayload("recruit:time:rec-cancel", FIRST_SLOT_UTC));
-    await runComponent(buttonPayload("recruit:register:rec-cancel"));
-    // さらに新しい draft を積む
-    await runComponent(selectPayload("recruit:party_size:rec-cancel", "full_party"));
+    await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-cancel", "any", FIRST_SLOT_UTC),
+    );
     expect(await getEntry("rec-cancel")).toBeDefined();
-    expect(await getDraft("rec-cancel")).toBeDefined();
 
     await runComponent(buttonPayload("recruit:cancel:rec-cancel"));
 
     expect(await getEntry("rec-cancel")).toBeUndefined();
-    expect(await getDraft("rec-cancel")).toBeUndefined();
   });
 
   it("does not resurrect a closed recruit via cancel + recompute", async () => {

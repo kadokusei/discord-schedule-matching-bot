@@ -7,12 +7,7 @@ import type {
 } from "discord-api-types/v10";
 import { ButtonStyle, ComponentType } from "discord-api-types/v10";
 import type { Env } from "../../lib/types";
-import {
-  PARTY_SIZE_PREFERENCES,
-  type PartySizePreference,
-  partySizePreferenceLabel,
-} from "../../features/recruit";
-import { buildTimeOptions, MAX_TIME_OPTIONS, type TimeOption } from "../../shared/time";
+import { type PartySizePreference } from "../../features/recruit";
 import { buildRecruitEmbed } from "./embed";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -121,44 +116,14 @@ export async function updateDiscordMessage(
 
 /**
  * 募集メッセージに付与する公開コンポーネント。
- * 1行目: 希望パーティサイズ select。2行目: 希望時間 select。3行目: 登録・更新/キャンセル button。
- * select 押下時は draft に保存し、「登録・更新」button で確定する（button payload は他 select の値を含まないため）。
+ * 1行目: 登録・更新（Modal を開く Primary Button）。2行目: キャンセル（Secondary Button）。
+ * 希望パーティサイズ・希望時間の選択は Modal 内 select で行う（Submit で 1 リクエスト確定）。
  * 削除は /schedule delete に一本化。
  */
 export function buildRecruitComponents(
   recruitId: string,
-  timeOptions: TimeOption[],
 ): APIActionRowComponent<APIComponentInMessageActionRow>[] {
   return [
-    {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.StringSelect,
-          custom_id: `recruit:party_size:${recruitId}`,
-          placeholder: "希望パーティサイズを選択",
-          min_values: 1,
-          max_values: 1,
-          options: PARTY_SIZE_PREFERENCES.map((value) => ({
-            label: partySizePreferenceLabel(value),
-            value,
-          })),
-        },
-      ],
-    },
-    {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.StringSelect,
-          custom_id: `recruit:time:${recruitId}`,
-          placeholder: "希望時間を選択",
-          min_values: 1,
-          max_values: 1,
-          options: timeOptions.map((opt) => ({ label: opt.label, value: opt.value })),
-        },
-      ],
-    },
     {
       type: ComponentType.ActionRow,
       components: [
@@ -168,6 +133,11 @@ export function buildRecruitComponents(
           label: "登録・更新",
           custom_id: `recruit:register:${recruitId}`,
         },
+      ],
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
@@ -199,24 +169,10 @@ export async function postRecruitMessage(
     confirmedCount: 0,
   });
 
-  const timeOptions = buildTimeOptions(
-    params.targetDateLocal,
-    params.postTimeHHmm,
-    params.intervalMin,
-    params.durationMin,
-    params.timezone,
-  );
-  // create guard を通過していれば 25 以下に収まる。漏れていた場合は黙って truncate せず明示的に失敗させる。
-  if (timeOptions.length > MAX_TIME_OPTIONS) {
-    throw new Error(
-      `time options exceed Discord string select limit: ${timeOptions.length} > ${MAX_TIME_OPTIONS}`,
-    );
-  }
-
   const payload = {
     content: params.template || `【募集】${params.targetDateLocal} ${params.postTimeHHmm}`,
     embeds: embedData.embeds,
-    components: buildRecruitComponents(params.recruitId, timeOptions),
+    components: buildRecruitComponents(params.recruitId),
     allowed_mentions: NO_MENTIONS,
   };
 

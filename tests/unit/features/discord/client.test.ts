@@ -365,7 +365,7 @@ describe("Discord API Client", () => {
       expect(callArgs.content).toBe("【募集】2026-01-18 20:00");
     });
 
-    it("should include party size select, time select, and register/cancel buttons", async () => {
+    it("should include a register button and a cancel button only", async () => {
       const mockFetch = vi.fn(() =>
         Promise.resolve({
           ok: true,
@@ -390,32 +390,16 @@ describe("Discord API Client", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const callArgs = JSON.parse(getRequestBody(mockFetch));
       expect(callArgs.components).toBeDefined();
-      // 1行目: 希望パーティサイズ select / 2行目: 希望時間 select / 3行目: 登録・キャンセル button
-      expect(callArgs.components).toHaveLength(3);
+      // 選択は Modal 内で行うため、メッセージは登録・更新 / キャンセルの 2 button のみ
+      expect(callArgs.components).toHaveLength(2);
 
-      // 1行目: party size select（3 候補）
-      const partySizeSelect = callArgs.components[0].components[0];
-      expect(partySizeSelect.type).toBe(3); // StringSelect
-      expect(partySizeSelect.custom_id).toBe("recruit:party_size:recruit-1");
-      expect(partySizeSelect.options).toHaveLength(3);
-
-      // 2行目: time select（buildTimeOptions 件数 = 360/30 + 1 = 13）
-      const timeSelect = callArgs.components[1].components[0];
-      expect(timeSelect.type).toBe(3);
-      expect(timeSelect.custom_id).toBe("recruit:time:recruit-1");
-      expect(timeSelect.options).toHaveLength(13);
-      // ISO value（HH:mm 自由入力ではない）を送る
-      expect(timeSelect.options[0].value).toMatch(/T\d{2}:\d{2}/);
-
-      // 3行目: 登録・更新 / キャンセル button
-      const buttonRow = callArgs.components[2].components;
-      expect(buttonRow).toHaveLength(2);
-      const registerButton = buttonRow[0];
+      const registerButton = callArgs.components[0].components[0];
       expect(registerButton.type).toBe(2); // Button
       expect(registerButton.style).toBe(1); // Primary
       expect(registerButton.label).toBe("登録・更新");
       expect(registerButton.custom_id).toBe("recruit:register:recruit-1");
-      const cancelButton = buttonRow[1];
+
+      const cancelButton = callArgs.components[1].components[0];
       expect(cancelButton.type).toBe(2);
       expect(cancelButton.label).toBe("キャンセル");
       expect(cancelButton.custom_id).toBe("recruit:cancel:recruit-1");
@@ -423,11 +407,11 @@ describe("Discord API Client", () => {
       const allCustomIds = callArgs.components.flatMap(
         (row: { components: { custom_id: string }[] }) => row.components.map((c) => c.custom_id),
       );
-      // 「未定」option や旧 join/delete ボタンは存在しない
+      // メッセージ上には select も旧 join/delete ボタンも無い
+      expect(allCustomIds.some((id: string) => id.includes("recruit:time:"))).toBe(false);
+      expect(allCustomIds.some((id: string) => id.includes("recruit:party_size:"))).toBe(false);
       expect(allCustomIds.some((id: string) => id.includes("recruit:join:"))).toBe(false);
       expect(allCustomIds.some((id: string) => id.includes("recruit:delete:"))).toBe(false);
-      const partySizeOptionValues = partySizeSelect.options.map((o: { value: string }) => o.value);
-      expect(partySizeOptionValues).not.toContain("undecided");
     });
 
     it("should return message ID", async () => {

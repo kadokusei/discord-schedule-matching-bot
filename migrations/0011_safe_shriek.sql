@@ -1,0 +1,1 @@
+DROP TABLE `recruit_entry_drafts`;
