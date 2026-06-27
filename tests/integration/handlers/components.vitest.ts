@@ -1,10 +1,16 @@
 import { env } from "cloudflare:test";
-import type { APIMessageComponentInteraction } from "discord-api-types/v10";
+import type {
+  APIMessageComponentInteraction,
+  APIModalSubmitInteraction,
+} from "discord-api-types/v10";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../../../src/db/schema";
-import { handleComponentInteraction } from "../../../src/handlers/components";
+import {
+  handleComponentInteraction,
+  handleModalSubmitInteraction,
+} from "../../../src/handlers/components";
 import { buildMatchFromRecruit } from "../../../src/handlers/matching";
 
 describe("Component Interaction Handlers - Unit Tests", () => {
@@ -250,10 +256,18 @@ describe("Component Interaction Handlers - Unit Tests", () => {
   });
 });
 
-describe("Component guards against closed recruits", () => {
+/** @original 編集の PATCH 本文（JSON parse 済み）から content を取り出す。 */
+const contentOf = (body: unknown): string => {
+  if (body && typeof body === "object" && "content" in body && typeof body.content === "string") {
+    return body.content;
+  }
+  return "";
+};
+
+describe("登録・更新 Modal フロー", () => {
   const db = drizzle(env.DB, { schema });
 
-  // editOriginalInteractionResponse(@original) の PATCH 本文を捕捉するためのモック
+  // editOriginalInteractionResponse(@original) の PATCH 本文を捕捉するモック
   const captureFetch = () => {
     const calls: { url: string; body: unknown }[] = [];
     globalThis.fetch = vi.fn((url: unknown, init?: RequestInit) => {
@@ -270,7 +284,7 @@ describe("Component guards against closed recruits", () => {
     return calls;
   };
 
-  // waitUntil の本処理を待ち合わせる ctx
+  // waitUntil の本処理を待ち合わせて component interaction を実行する
   const runComponent = async (interaction: APIMessageComponentInteraction) => {
     const promises: Promise<unknown>[] = [];
     const ctx = {
@@ -278,22 +292,84 @@ describe("Component guards against closed recruits", () => {
         promises.push(p);
       },
     };
-    const response = handleComponentInteraction(interaction, env, ctx);
+    const response = await handleComponentInteraction(interaction, env, ctx);
     await Promise.all(promises);
     return response;
   };
 
-  const componentPayload = (customId: string): APIMessageComponentInteraction =>
+  // waitUntil の本処理を待ち合わせて modal submit を実行する
+  const runModalSubmit = async (interaction: APIModalSubmitInteraction) => {
+    const promises: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (p: Promise<unknown>) => {
+        promises.push(p);
+      },
+    };
+    const response = handleModalSubmitInteraction(interaction, env, ctx);
+    await Promise.all(promises);
+    return response;
+  };
+
+  // button の interaction（component_type 2）
+  const buttonPayload = (customId: string, userId = "clicker"): APIMessageComponentInteraction =>
     ({
       type: 3,
       id: "i",
       application_id: "test-app-id",
       token: "tok",
-      member: { user: { id: "clicker" } },
+      member: { user: { id: userId } },
       data: { custom_id: customId, component_type: 2 },
     }) as unknown as APIMessageComponentInteraction;
 
-  const insertClosedRecruit = (id: string, status: string) =>
+  // modal submit の interaction（希望パーティサイズ・希望時間とも string select の values）
+  const modalSubmitPayload = (
+    customId: string,
+    partySize: string,
+    availableTime: string,
+    userId = "clicker",
+  ): APIModalSubmitInteraction =>
+    ({
+      type: 5,
+      id: "i",
+      application_id: "test-app-id",
+      token: "tok",
+      member: { user: { id: userId } },
+      data: {
+        custom_id: customId,
+        components: [
+          {
+            type: 18,
+            component: { type: 3, custom_id: "party_size_preference", values: [partySize] },
+          },
+          {
+            type: 18,
+            component: { type: 3, custom_id: "available_time", values: [availableTime] },
+          },
+        ],
+      },
+    }) as unknown as APIModalSubmitInteraction;
+
+  const insertSchedule = () =>
+    db.insert(schema.schedules).values({
+      id: "sched-x",
+      guildId: "guild-x",
+      channelId: "ch-x",
+      creatorId: "creator",
+      postTimeHHmm: "20:00",
+      intervalMin: 30,
+      durationMin: 360,
+      template: "",
+      active: 1,
+    });
+
+  const insertSettings = () =>
+    db.insert(schema.guildSettings).values({
+      id: "gs-x",
+      guildId: "guild-x",
+      timezone: "Asia/Tokyo",
+    });
+
+  const insertRecruit = (id: string, status: string) =>
     db.insert(schema.recruits).values({
       id,
       scheduleId: "sched-x",
@@ -304,202 +380,163 @@ describe("Component guards against closed recruits", () => {
       status,
     });
 
+  const getEntry = (recruitId: string) =>
+    db
+      .select()
+      .from(schema.recruitEntries)
+      .where(
+        and(
+          eq(schema.recruitEntries.recruitId, recruitId),
+          eq(schema.recruitEntries.userId, "clicker"),
+        ),
+      )
+      .get();
+
+  // 20:00 JST = 11:00 UTC（buildTimeOptions の先頭候補）
+  const FIRST_SLOT_UTC = "2026-06-15T11:00:00.000Z";
+
   beforeEach(async () => {
     await db.delete(schema.recruitEntries);
     await db.delete(schema.recruits);
+    await db.delete(schema.schedules);
+    await db.delete(schema.guildSettings);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  const timeSelectPayload = (
-    customId: string,
-    value: string,
-    userId = "clicker",
-  ): APIMessageComponentInteraction =>
-    ({
-      type: 3,
-      id: "i",
-      application_id: "test-app-id",
-      token: "tok",
-      member: { user: { id: userId } },
-      data: { custom_id: customId, component_type: 3, values: [value] },
-    }) as unknown as APIMessageComponentInteraction;
-
-  it("creates a confirmed entry directly on time selection (no prior join)", async () => {
-    const calls = captureFetch();
-    await insertClosedRecruit("rec-open", "open");
-
-    const response = await runComponent(
-      timeSelectPayload("recruit:time:rec-open", "2026-06-15T11:00:00.000Z"),
-    );
-    // 即時応答は ephemeral deferred
-    expect((response as { type: number }).type).toBe(5);
-
-    // 事前 join なしで confirmed エントリが直接作られる
-    const entries = await db
-      .select()
-      .from(schema.recruitEntries)
-      .where(
-        and(
-          eq(schema.recruitEntries.recruitId, "rec-open"),
-          eq(schema.recruitEntries.userId, "clicker"),
-        ),
-      )
-      .all();
-    expect(entries).toHaveLength(1);
-    expect(entries[0]?.state).toBe("confirmed");
-    expect(entries[0]?.availableFromUtc).toBe("2026-06-15T11:00:00.000Z");
-
-    // @original 編集で登録完了を本人に通知
-    const original = calls.find((c) => c.url.includes("/messages/@original"));
-    expect((original?.body as { content?: string })?.content).toContain("希望時間を登録しました");
-  });
-
-  it("updates the time on re-selection", async () => {
+  it("recruit:register ボタンは Modal(type 9)を返し、パーティサイズ select と時間 select を含む", async () => {
     captureFetch();
-    await insertClosedRecruit("rec-open2", "open");
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-open", "open");
 
-    await runComponent(timeSelectPayload("recruit:time:rec-open2", "2026-06-15T11:00:00.000Z"));
-    await runComponent(timeSelectPayload("recruit:time:rec-open2", "2026-06-15T12:00:00.000Z"));
+    const response = await runComponent(buttonPayload("recruit:register:rec-open"));
 
-    const entries = await db
-      .select()
-      .from(schema.recruitEntries)
-      .where(
-        and(
-          eq(schema.recruitEntries.recruitId, "rec-open2"),
-          eq(schema.recruitEntries.userId, "clicker"),
-        ),
-      )
-      .all();
-    expect(entries).toHaveLength(1);
-    expect(entries[0]?.availableFromUtc).toBe("2026-06-15T12:00:00.000Z");
+    expect(response.type).toBe(9);
+    if (response.type !== 9) throw new Error("expected modal response");
+    // discord-api-types は Label(type 18) を型付けしないため、応答 data を Modal 構造へ名前付きキャスト
+    const data = response.data as {
+      custom_id: string;
+      components: { type: number; component: { custom_id: string; options?: unknown[] } }[];
+    };
+    expect(data.custom_id).toBe("recruit:register-modal:rec-open");
+
+    const sizeSelect = data.components.find(
+      (c) => c.component.custom_id === "party_size_preference",
+    );
+    expect(sizeSelect?.component.options).toHaveLength(3);
+
+    // 希望時間 select は buildTimeOptions 件数（360/30 + 1 = 13）
+    const timeSelect = data.components.find((c) => c.component.custom_id === "available_time");
+    expect(timeSelect?.component.options).toHaveLength(13);
   });
 
-  it("rejects time selection on a cancelled recruit", async () => {
+  it("終端状態(closed)の募集の register ボタンは Modal ではなく ephemeral エラー(type 4)", async () => {
+    captureFetch();
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-closedbtn", "closed");
+
+    const response = await runComponent(buttonPayload("recruit:register:rec-closedbtn"));
+    expect(response.type).toBe(4);
+    expect((response as { data?: { content?: string } }).data?.content).toContain("終了");
+  });
+
+  it("modal submit で希望時間と希望パーティサイズを recruit_entries に登録する", async () => {
     const calls = captureFetch();
-    await insertClosedRecruit("rec-cancelled", "cancelled");
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-reg", "open");
 
-    const interaction = {
-      type: 3,
-      id: "i",
-      application_id: "test-app-id",
-      token: "tok",
-      member: { user: { id: "clicker" } },
-      data: {
-        custom_id: "recruit:time:rec-cancelled",
-        component_type: 3,
-        values: ["2026-06-15T11:00:00.000Z"],
-      },
-    } as unknown as APIMessageComponentInteraction;
+    const response = await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-reg", "up_to_trio", FIRST_SLOT_UTC),
+    );
+    expect(response.type).toBe(5);
 
-    await runComponent(interaction);
+    const entry = await getEntry("rec-reg");
+    expect(entry?.availableFromUtc).toBe(FIRST_SLOT_UTC);
+    expect(entry?.partySizePreference).toBe("up_to_trio");
 
     const original = calls.find((c) => c.url.includes("/messages/@original"));
-    expect((original?.body as { content?: string })?.content).toContain("終了");
+    expect(contentOf(original?.body)).toContain("希望時間を登録しました");
+    expect(contentOf(original?.body)).toContain("トリオまで");
+  });
 
-    const entries = await db
-      .select()
-      .from(schema.recruitEntries)
-      .where(
-        and(
-          eq(schema.recruitEntries.recruitId, "rec-cancelled"),
-          eq(schema.recruitEntries.userId, "clicker"),
-        ),
-      )
-      .all();
-    expect(entries).toHaveLength(0);
+  it("無効な party size の modal submit は登録せずエラーを返す", async () => {
+    captureFetch();
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-badps", "open");
+
+    await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-badps", "", FIRST_SLOT_UTC),
+    );
+
+    expect(await getEntry("rec-badps")).toBeUndefined();
+  });
+
+  it("募集時間外の time value の modal submit は登録せずエラーを返す", async () => {
+    captureFetch();
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-oob", "open");
+
+    await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-oob", "any", "2026-06-15T03:00:00.000Z"),
+    );
+
+    expect(await getEntry("rec-oob")).toBeUndefined();
+  });
+
+  it("終端状態(closed)の募集への modal submit は DB を変更しない", async () => {
+    const calls = captureFetch();
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-closed", "closed");
+
+    await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-closed", "any", FIRST_SLOT_UTC),
+    );
+
+    expect(await getEntry("rec-closed")).toBeUndefined();
+    const original = calls.find((c) => c.url.includes("/messages/@original"));
+    expect(contentOf(original?.body)).toContain("終了");
+  });
+
+  it("cancel は確定参加を削除する", async () => {
+    captureFetch();
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-cancel", "open");
+
+    await runModalSubmit(
+      modalSubmitPayload("recruit:register-modal:rec-cancel", "any", FIRST_SLOT_UTC),
+    );
+    expect(await getEntry("rec-cancel")).toBeDefined();
+
+    await runComponent(buttonPayload("recruit:cancel:rec-cancel"));
+
+    expect(await getEntry("rec-cancel")).toBeUndefined();
   });
 
   it("does not resurrect a closed recruit via cancel + recompute", async () => {
     captureFetch();
-    await insertClosedRecruit("rec-closed2", "closed");
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-closed2", "closed");
 
-    await runComponent(componentPayload("recruit:cancel:rec-closed2"));
+    await runComponent(buttonPayload("recruit:cancel:rec-closed2"));
 
     const recruit = await db
       .select()
       .from(schema.recruits)
       .where(eq(schema.recruits.id, "rec-closed2"))
       .get();
-    // status は closed のまま（open/matched に戻らない）
     expect(recruit?.status).toBe("closed");
-  });
-});
-
-describe("handleRecruitTime - 「未定」選択", () => {
-  const db = drizzle(env.DB, { schema });
-
-  const runComponent = async (interaction: APIMessageComponentInteraction) => {
-    const promises: Promise<unknown>[] = [];
-    const ctx = {
-      waitUntil: (p: Promise<unknown>) => {
-        promises.push(p);
-      },
-    };
-    handleComponentInteraction(interaction, env, ctx);
-    await Promise.all(promises);
-  };
-
-  const timeSelect = (customId: string, value: string): APIMessageComponentInteraction =>
-    ({
-      type: 3,
-      id: "i",
-      application_id: "test-app-id",
-      token: "tok",
-      member: { user: { id: "clicker" } },
-      data: { custom_id: customId, component_type: 3, values: [value] },
-    }) as unknown as APIMessageComponentInteraction;
-
-  beforeEach(async () => {
-    await db.delete(schema.recruitEntries);
-    await db.delete(schema.recruits);
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({}),
-        text: () => Promise.resolve(""),
-      } as Response),
-    ) as unknown as typeof fetch;
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("「未定」選択で state=undecided・availableFromUtc=null・lastRemindedAtUtc=null になる", async () => {
-    await db.insert(schema.recruits).values({
-      id: "rec-undecided",
-      scheduleId: "sched-x",
-      guildId: "guild-x",
-      channelId: "ch-x",
-      messageId: "msg-x",
-      targetDateLocal: "2026-06-15",
-      status: "open",
-    });
-
-    await runComponent(timeSelect("recruit:time:rec-undecided", "undecided"));
-
-    const entry = await db
-      .select()
-      .from(schema.recruitEntries)
-      .where(
-        and(
-          eq(schema.recruitEntries.recruitId, "rec-undecided"),
-          eq(schema.recruitEntries.userId, "clicker"),
-        ),
-      )
-      .get();
-
-    expect(entry?.state).toBe("undecided");
-    expect(entry?.availableFromUtc).toBeNull();
-    expect(entry?.lastRemindedAtUtc).toBeNull();
   });
 });
 
 // Note: Full integration tests for component interactions require SELF.fetch
 // and are better tested through the actual worker endpoint.
-// The above tests cover the core logic and edge cases.

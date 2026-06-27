@@ -87,13 +87,40 @@ describe("E2E: interaction routing through app.fetch", () => {
     expect(body.data?.content).toBe("登録されているアカウントはありません");
   });
 
-  it("routes recruit:time component (colon-delimited custom_id) to a deferred ephemeral response", async () => {
-    const response = await post(componentPayload("recruit:time:some-recruit-id"));
+  it("routes recruit:register component to a Modal response", async () => {
+    // active な募集が必要（Modal の希望時間 select を募集時間から組むため）
+    await db.insert(schema.schedules).values({
+      id: "sched-reg",
+      guildId: "guild-reg",
+      channelId: "ch-reg",
+      creatorId: "creator",
+      postTimeHHmm: "20:00",
+      intervalMin: 30,
+      durationMin: 360,
+      template: "",
+      active: 1,
+    });
+    await db.insert(schema.guildSettings).values({
+      id: "gs-reg",
+      guildId: "guild-reg",
+      timezone: "Asia/Tokyo",
+    });
+    await db.insert(schema.recruits).values({
+      id: "rec-reg",
+      scheduleId: "sched-reg",
+      guildId: "guild-reg",
+      channelId: "ch-reg",
+      messageId: "msg-reg",
+      targetDateLocal: "2026-06-15",
+      status: "open",
+    });
+
+    const response = await post(componentPayload("recruit:register:rec-reg"));
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { type: number; data?: { flags?: number } };
-    // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE + EPHEMERAL
-    expect(body.type).toBe(5);
-    expect(body.data?.flags).toBe(64);
+    const body = (await response.json()) as { type: number; data?: { custom_id?: string } };
+    // MODAL (InteractionResponseType.Modal = 9)
+    expect(body.type).toBe(9);
+    expect(body.data?.custom_id).toBe("recruit:register-modal:rec-reg");
   });
 
   it("routes recruit:cancel component to a deferred ephemeral response", async () => {

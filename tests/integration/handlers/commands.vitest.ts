@@ -113,7 +113,7 @@ describe("Command Handlers - Integration Tests", () => {
       expect((response as { data?: { content?: string } }).data?.content).toContain("エラー");
     });
 
-    it("should reject options that exceed the 25-option time menu limit", async () => {
+    it("should reject options that exceed the 25-slot time select limit", async () => {
       // interval 5分 / duration 360分 → 73個 > 25
       const response = await dispatch(
         buildCommandInteraction(
@@ -151,8 +151,8 @@ describe("Command Handlers - Integration Tests", () => {
       expect(await db.select().from(schema.schedules).all()).toHaveLength(0);
     });
 
-    it("should create at the 25-option boundary (23h / 60min + 未定 = 25)", async () => {
-      // interval 60分 / duration 1380分 → 24スロット + 「未定」= 25個 (境界, 許可)
+    it("should create at the 25-slot boundary (24h / 60min = 25 slots)", async () => {
+      // interval 60分 / duration 1440分 → 25スロット (境界, 許可)
       await dispatch(
         buildCommandInteraction(
           "schedule",
@@ -160,7 +160,7 @@ describe("Command Handlers - Integration Tests", () => {
           [
             { name: "post_time", value: "20:00" },
             { name: "interval", value: 60, type: 4 },
-            { name: "duration", value: 1380, type: 4 },
+            { name: "duration", value: 1440, type: 4 },
           ],
           { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
         ),
@@ -169,8 +169,8 @@ describe("Command Handlers - Integration Tests", () => {
       expect(await db.select().from(schema.schedules).all()).toHaveLength(1);
     });
 
-    it("should reject just over the boundary (24h / 60min + 未定 = 26)", async () => {
-      // interval 60分 / duration 1440分 → 25スロット + 「未定」= 26個 > 25 (拒否)
+    it("should reject just over the boundary (25h / 60min = 26 slots)", async () => {
+      // interval 60分 / duration 1500分 → 26スロット > 25 (拒否)
       const response = await dispatch(
         buildCommandInteraction(
           "schedule",
@@ -178,7 +178,7 @@ describe("Command Handlers - Integration Tests", () => {
           [
             { name: "post_time", value: "20:00" },
             { name: "interval", value: 60, type: 4 },
-            { name: "duration", value: 1440, type: 4 },
+            { name: "duration", value: 1500, type: 4 },
           ],
           { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
         ),
@@ -231,48 +231,6 @@ describe("Command Handlers - Integration Tests", () => {
         .get();
 
       expect(settings?.timezone).toBe("UTC");
-    });
-
-    it("should update reminder_interval alone", async () => {
-      await dispatch(
-        buildCommandInteraction(
-          "schedule",
-          "settings",
-          [{ name: "reminder_interval", value: 60, type: 4 }],
-          { guildId: "test-guild" },
-        ),
-      );
-
-      const settings = await db
-        .select()
-        .from(schema.guildSettings)
-        .where(eq(schema.guildSettings.guildId, "test-guild"))
-        .get();
-
-      expect(settings?.reminderIntervalMin).toBe(60);
-    });
-
-    it("should update both timezone and reminder_interval", async () => {
-      await dispatch(
-        buildCommandInteraction(
-          "schedule",
-          "settings",
-          [
-            { name: "timezone", value: "Asia/Tokyo" },
-            { name: "reminder_interval", value: 90, type: 4 },
-          ],
-          { guildId: "test-guild" },
-        ),
-      );
-
-      const settings = await db
-        .select()
-        .from(schema.guildSettings)
-        .where(eq(schema.guildSettings.guildId, "test-guild"))
-        .get();
-
-      expect(settings?.timezone).toBe("Asia/Tokyo");
-      expect(settings?.reminderIntervalMin).toBe(90);
     });
   });
 
@@ -369,7 +327,7 @@ describe("Command Handlers - Integration Tests", () => {
       await db.insert(schema.recruitEntries).values({
         recruitId: "recruit-1",
         userId: "test-user",
-        state: "confirmed",
+        availableFromUtc: "2026-06-15T11:00:00.000Z",
         createdAtUtc: new Date().toISOString(),
         updatedAtUtc: new Date().toISOString(),
       });

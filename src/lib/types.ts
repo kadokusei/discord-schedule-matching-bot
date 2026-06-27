@@ -15,10 +15,3 @@ export interface Env {
 export interface WaitUntilContext {
   waitUntil(promise: Promise<unknown>): void;
 }
-
-/**
- * recruit_entries.state の取りうる値。
- * - confirmed: 希望時間を選択済み（マッチング計算の対象）
- * - undecided: 「未定」を選択（通常リマインドはせず、人数充足時のみ通知）
- */
-export type RecruitEntryState = "confirmed" | "undecided";

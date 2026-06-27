@@ -4,6 +4,7 @@ import { guildSettings, recruitEntries, recruits, riotAccounts, schedules } from
 import { postChannelMessage, postRecruitMessage, updateDiscordMessage } from "../features/discord";
 import { findEarliestSubParty } from "../features/matching";
 import {
+  type PartySizePreference,
   buildSmallPartyProposal,
   currentIntervalSlotUtc,
   formatRegisterNudge,
@@ -59,13 +60,12 @@ async function proposeSmallParties(
       .where(eq(recruitEntries.recruitId, recruit.id))
       .all();
 
-    const confirmed = entries
-      .filter((e) => e.state === "confirmed" && e.availableFromUtc)
-      .map((e) => ({
-        userId: e.userId,
-        availableFromUtc: e.availableFromUtc as string,
-        createdAtUtc: e.createdAtUtc,
-      }));
+    const confirmed = entries.map((e) => ({
+      userId: e.userId,
+      availableFromUtc: e.availableFromUtc,
+      createdAtUtc: e.createdAtUtc,
+      partySizePreference: e.partySizePreference as PartySizePreference,
+    }));
 
     if (confirmed.length < 2) continue;
 
@@ -277,13 +277,11 @@ export async function handleScheduled(env: Env): Promise<void> {
         .where(eq(recruitEntries.recruitId, recruit.id))
         .all();
 
-      const confirmedEntries = entries.filter((e) => e.state === "confirmed");
-
       await updateDiscordMessage(env, recruit.channelId, recruit.messageId, {
         targetDateLocal: recruit.targetDateLocal,
         postTimeHHmm: schedule.postTimeHHmm,
         status: "cancelled",
-        confirmedCount: confirmedEntries.length,
+        confirmedCount: entries.length,
         timezone: tz,
       });
     } catch (error) {

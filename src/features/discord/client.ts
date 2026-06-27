@@ -7,12 +7,7 @@ import type {
 } from "discord-api-types/v10";
 import { ButtonStyle, ComponentType } from "discord-api-types/v10";
 import type { Env } from "../../lib/types";
-import {
-  MAX_TIME_OPTIONS,
-  type TimeOption,
-  UNDECIDED_VALUE,
-  buildTimeOptions,
-} from "../../shared/time";
+import { type PartySizePreference } from "../../features/recruit";
 import { buildRecruitEmbed } from "./embed";
 
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -71,9 +66,11 @@ export interface UpdateRecruitMessageParams {
   postTimeHHmm: string;
   status: "open" | "matched" | "cancelled" | "deleted";
   confirmedCount: number;
-  undecidedCount?: number;
-  confirmedUsers?: { userId: string; availableFromUtc: string }[];
-  undecidedUserIds?: string[];
+  confirmedUsers?: {
+    userId: string;
+    availableFromUtc: string;
+    partySizePreference: PartySizePreference;
+  }[];
   matchedMembers?: string[];
   matchedTime?: string;
   earlierSubParty?: { memberIds: string[]; meetTimeUtc: string };
@@ -119,37 +116,22 @@ export async function updateDiscordMessage(
 
 /**
  * 募集メッセージに付与する公開コンポーネント。
- * 1行目: 希望時間を選ぶ StringSelect（選択＝参加・更新）。末尾に「未定」を含む。2行目: キャンセルボタン。
+ * 1行目: 登録・更新（Modal を開く Primary Button）。2行目: キャンセル（Secondary Button）。
+ * 希望パーティサイズ・希望時間の選択は Modal 内 select で行う（Submit で 1 リクエスト確定）。
  * 削除は /schedule delete に一本化。
  */
 export function buildRecruitComponents(
   recruitId: string,
-  timeOptions: TimeOption[],
 ): APIActionRowComponent<APIComponentInMessageActionRow>[] {
-  // セレクトの選択肢は時間スロット + 「未定」1件で、合計が Discord 上限(25)を超えないようにする。
-  // 上限超過は作成時バリデーションで弾くが、旧データ保険としてここでも時間スロットを切り詰める。
-  const maxSlots = MAX_TIME_OPTIONS - 1;
-  if (timeOptions.length > maxSlots) {
-    console.warn(
-      `[DISCORD] recruit ${recruitId} has ${timeOptions.length} time options, truncating to ${maxSlots}`,
-    );
-  }
-  const slotOptions = timeOptions.slice(0, maxSlots).map((opt) => ({
-    label: opt.label,
-    value: opt.value,
-  }));
-
   return [
     {
       type: ComponentType.ActionRow,
       components: [
         {
-          type: ComponentType.StringSelect,
-          custom_id: `recruit:time:${recruitId}`,
-          placeholder: "希望時間を選択",
-          options: [...slotOptions, { label: "未定", value: UNDECIDED_VALUE }],
-          min_values: 1,
-          max_values: 1,
+          type: ComponentType.Button,
+          style: ButtonStyle.Primary,
+          label: "登録・更新",
+          custom_id: `recruit:register:${recruitId}`,
         },
       ],
     },
@@ -187,18 +169,10 @@ export async function postRecruitMessage(
     confirmedCount: 0,
   });
 
-  const timeOptions = buildTimeOptions(
-    params.targetDateLocal,
-    params.postTimeHHmm,
-    params.intervalMin,
-    params.durationMin,
-    params.timezone,
-  );
-
   const payload = {
     content: params.template || `【募集】${params.targetDateLocal} ${params.postTimeHHmm}`,
     embeds: embedData.embeds,
-    components: buildRecruitComponents(params.recruitId, timeOptions),
+    components: buildRecruitComponents(params.recruitId),
     allowed_mentions: NO_MENTIONS,
   };
 

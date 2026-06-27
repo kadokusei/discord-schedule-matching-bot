@@ -365,7 +365,7 @@ describe("Discord API Client", () => {
       expect(callArgs.content).toBe("【募集】2026-01-18 20:00");
     });
 
-    it("should include a time select menu and a cancel button (no join/delete button)", async () => {
+    it("should include a register button and a cancel button only", async () => {
       const mockFetch = vi.fn(() =>
         Promise.resolve({
           ok: true,
@@ -390,23 +390,26 @@ describe("Discord API Client", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const callArgs = JSON.parse(getRequestBody(mockFetch));
       expect(callArgs.components).toBeDefined();
-      // 1行目: 時間選択メニュー / 2行目: キャンセルボタン
+      // 選択は Modal 内で行うため、メッセージは登録・更新 / キャンセルの 2 button のみ
       expect(callArgs.components).toHaveLength(2);
 
-      const select = callArgs.components[0].components[0];
-      // StringSelect (ComponentType.StringSelect = 3)
-      expect(select.type).toBe(3);
-      expect(select.custom_id).toContain("recruit:time:");
-      // 30分間隔 / 360分 → 13個の時間スロット + 「未定」= 14個
-      expect(select.options).toHaveLength(14);
-      expect(select.options[13]).toEqual({ label: "未定", value: "undecided" });
+      const registerButton = callArgs.components[0].components[0];
+      expect(registerButton.type).toBe(2); // Button
+      expect(registerButton.style).toBe(1); // Primary
+      expect(registerButton.label).toBe("登録・更新");
+      expect(registerButton.custom_id).toBe("recruit:register:recruit-1");
 
       const cancelButton = callArgs.components[1].components[0];
-      expect(cancelButton.custom_id).toContain("recruit:cancel:");
+      expect(cancelButton.type).toBe(2);
+      expect(cancelButton.label).toBe("キャンセル");
+      expect(cancelButton.custom_id).toBe("recruit:cancel:recruit-1");
 
       const allCustomIds = callArgs.components.flatMap(
         (row: { components: { custom_id: string }[] }) => row.components.map((c) => c.custom_id),
       );
+      // メッセージ上には select も旧 join/delete ボタンも無い
+      expect(allCustomIds.some((id: string) => id.includes("recruit:time:"))).toBe(false);
+      expect(allCustomIds.some((id: string) => id.includes("recruit:party_size:"))).toBe(false);
       expect(allCustomIds.some((id: string) => id.includes("recruit:join:"))).toBe(false);
       expect(allCustomIds.some((id: string) => id.includes("recruit:delete:"))).toBe(false);
     });

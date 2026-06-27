@@ -44,12 +44,7 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
             type: ApplicationCommandOptionType.String,
             name: "timezone",
             description: "タイムゾーン (例: Asia/Tokyo)",
-          },
-          {
-            type: ApplicationCommandOptionType.Integer,
-            name: "reminder_interval",
-            description: "未定者へのリマインド間隔（分）",
-            min_value: 1,
+            required: true,
           },
         ],
       },

@@ -7,7 +7,6 @@ export const guildSettings = sqliteTable("guild_settings", {
   defaultIntervalMin: integer("default_interval_min").notNull().default(30),
   defaultDurationMin: integer("default_duration_min").notNull().default(360),
   defaultTemplate: text("default_template").notNull().default(""),
-  reminderIntervalMin: integer("reminder_interval_min"),
 });
 
 export const schedules = sqliteTable("schedules", {
@@ -54,11 +53,12 @@ export const recruitEntries = sqliteTable(
       .notNull()
       .references(() => recruits.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull(),
-    state: text("state").notNull(),
-    availableFromUtc: text("available_from_utc"),
+    // 参加行は希望時間あり（HH:mm 入力から募集時間内の一意候補に解決した ISO8601）。
+    availableFromUtc: text("available_from_utc").notNull(),
+    // 希望パーティサイズ: "any" | "full_party" | "up_to_trio"
+    partySizePreference: text("party_size_preference").notNull().default("any"),
     createdAtUtc: text("created_at_utc").notNull(),
     updatedAtUtc: text("updated_at_utc").notNull(),
-    lastRemindedAtUtc: text("last_reminded_at_utc"),
   },
   (t) => [primaryKey({ columns: [t.recruitId, t.userId] })],
 );

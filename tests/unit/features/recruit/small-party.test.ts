@@ -9,10 +9,12 @@ const entry = (
   userId: string,
   availableFromUtc: string,
   createdAtUtc = "2026-01-17T20:00:00.000Z",
+  partySizePreference: "any" | "full_party" | "up_to_trio" = "any",
 ) => ({
   userId,
   availableFromUtc,
   createdAtUtc,
+  partySizePreference,
 });
 
 describe("buildSmallPartyProposal", () => {
@@ -91,6 +93,24 @@ describe("buildSmallPartyProposal", () => {
     ]);
 
     expect(buildSmallPartyProposal(confirmed, ranks, slot)).toBeNull();
+  });
+
+  it("希望パーティサイズ full_party の参加者は少人数提案から除外する", () => {
+    const confirmed = [
+      entry("a", "2026-01-17T22:00:00.000Z", "2026-01-17T20:00:00.000Z", "full_party"),
+      entry("b", "2026-01-17T22:00:00.000Z"),
+      entry("c", "2026-01-17T22:00:00.000Z"),
+    ];
+    const ranks = new Map([
+      ["a", ["Gold 1"]],
+      ["b", ["Gold 2"]],
+      ["c", ["Gold 3"]],
+    ]);
+
+    const result = buildSmallPartyProposal(confirmed, ranks, slot);
+
+    // a は full_party なので候補から外れ、b/c の2人提案になる
+    expect(result?.party.memberIds).toEqual(["b", "c"]);
   });
 });
 
