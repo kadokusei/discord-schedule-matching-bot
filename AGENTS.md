@@ -61,22 +61,17 @@ tests/                # unit/（*.test.ts）と integration/（*.vitest.ts）
 
 ### 状態遷移（recruit_entries）
 
-```
-pending_time → confirmed
-     ↓
-   cancelled
-```
+`recruit_entries.state` は `confirmed`（希望時間選択済）と `undecided`（未定）の2値。
+参加取消はエントリ行の **DELETE** で表現する（`cancelled` 状態は存在しない）。
 
 ## 主要コンセプト
 
 ### インタラクションフロー
 
 1. **スケジュールタスク**: 設定時刻に募集インスタンスを生成
-2. **参加**: 状態を `pending_time` にし、時間選択メニューを表示
-3. **時間選択**: 状態を `confirmed` にし、再計算をトリガ
+2. **参加**: 時間選択メニューを表示。選択値が時間なら `confirmed`、「未定」なら `undecided` でエントリを upsert し再計算をトリガ
+3. **時間選択**: `confirmed`（時間）または `undecided`（未定）へ遷移し、再計算をトリガ
 4. **マッチ計算**: confirmed が 5 人以上になると最適パーティを探索
-
-### マッチングアルゴリズム
 
 - 最も早く集合できる時間を優先
 - ランクバランス（分散の最小化）を考慮

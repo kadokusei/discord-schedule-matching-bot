@@ -1,4 +1,4 @@
-export { computeBestParty, selectOptimalAccounts, RANK_HIERARCHY } from "./algorithm";
+export { computeBestParty, RANK_HIERARCHY } from "./algorithm";
 export type { Entry, BestParty } from "./algorithm";
 
 export { canQueueAsParty, majorTierOf, MAJOR_TIERS } from "./rank-restriction";
