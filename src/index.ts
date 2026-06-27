@@ -3,7 +3,6 @@ import type {
   APIApplicationCommandInteraction,
   APIInteraction,
   APIMessageComponentInteraction,
-  APIModalSubmitInteraction,
 } from "discord-api-types/v10";
 import { InteractionResponseType, InteractionType } from "discord-api-types/v10";
 import { verifyKey } from "discord-interactions";
@@ -12,7 +11,6 @@ import {
   handleAutocomplete,
   handleCommandInteraction,
   handleComponentInteraction,
-  handleModalSubmitInteraction,
   handleScheduled,
 } from "./handlers";
 import { isSignatureBypassEnabled } from "./lib/security";
@@ -60,15 +58,6 @@ app.post("/", async (c) => {
     case InteractionType.MessageComponent: {
       const response = await handleComponentInteraction(
         interaction as APIMessageComponentInteraction,
-        env,
-        c.executionCtx,
-      );
-      return c.json(response);
-    }
-
-    case InteractionType.ModalSubmit: {
-      const response = await handleModalSubmitInteraction(
-        interaction as APIModalSubmitInteraction,
         env,
         c.executionCtx,
       );

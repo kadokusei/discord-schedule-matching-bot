@@ -113,8 +113,8 @@ describe("Command Handlers - Integration Tests", () => {
       expect((response as { data?: { content?: string } }).data?.content).toContain("エラー");
     });
 
-    it("should reject options that exceed the 24-slot time input limit", async () => {
-      // interval 5分 / duration 360分 → 73個 > 24
+    it("should reject options that exceed the 25-slot time select limit", async () => {
+      // interval 5分 / duration 360分 → 73個 > 25
       const response = await dispatch(
         buildCommandInteraction(
           "schedule",
@@ -128,13 +128,13 @@ describe("Command Handlers - Integration Tests", () => {
         ),
       );
 
-      expect((response as { data?: { content?: string } }).data?.content).toContain("24");
+      expect((response as { data?: { content?: string } }).data?.content).toContain("25");
       const schedules = await db.select().from(schema.schedules).all();
       expect(schedules).toHaveLength(0);
     });
 
     it("should reject when default fallback exceeds the limit even if only one option is given", async () => {
-      // interval 5分 のみ指定、duration はデフォルト 360分 → 73個 > 24
+      // interval 5分 のみ指定、duration はデフォルト 360分 → 73個 > 25
       const response = await dispatch(
         buildCommandInteraction(
           "schedule",
@@ -147,31 +147,13 @@ describe("Command Handlers - Integration Tests", () => {
         ),
       );
 
-      expect((response as { data?: { content?: string } }).data?.content).toContain("24");
+      expect((response as { data?: { content?: string } }).data?.content).toContain("25");
       expect(await db.select().from(schema.schedules).all()).toHaveLength(0);
     });
 
-    it("should create at the 24-slot boundary (23h / 60min = 24 slots)", async () => {
-      // interval 60分 / duration 1380分 → 24スロット (境界, 許可)
+    it("should create at the 25-slot boundary (24h / 60min = 25 slots)", async () => {
+      // interval 60分 / duration 1440分 → 25スロット (境界, 許可)
       await dispatch(
-        buildCommandInteraction(
-          "schedule",
-          "create",
-          [
-            { name: "post_time", value: "20:00" },
-            { name: "interval", value: 60, type: 4 },
-            { name: "duration", value: 1380, type: 4 },
-          ],
-          { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
-        ),
-      );
-
-      expect(await db.select().from(schema.schedules).all()).toHaveLength(1);
-    });
-
-    it("should reject just over the boundary (24h / 60min = 25 slots)", async () => {
-      // interval 60分 / duration 1440分 → 25スロット > 24 (拒否)
-      const response = await dispatch(
         buildCommandInteraction(
           "schedule",
           "create",
@@ -184,7 +166,25 @@ describe("Command Handlers - Integration Tests", () => {
         ),
       );
 
-      expect((response as { data?: { content?: string } }).data?.content).toContain("24");
+      expect(await db.select().from(schema.schedules).all()).toHaveLength(1);
+    });
+
+    it("should reject just over the boundary (25h / 60min = 26 slots)", async () => {
+      // interval 60分 / duration 1500分 → 26スロット > 25 (拒否)
+      const response = await dispatch(
+        buildCommandInteraction(
+          "schedule",
+          "create",
+          [
+            { name: "post_time", value: "20:00" },
+            { name: "interval", value: 60, type: 4 },
+            { name: "duration", value: 1500, type: 4 },
+          ],
+          { guildId: "test-guild", channelId: "test-channel", userId: "test-user" },
+        ),
+      );
+
+      expect((response as { data?: { content?: string } }).data?.content).toContain("25");
       expect(await db.select().from(schema.schedules).all()).toHaveLength(0);
     });
   });

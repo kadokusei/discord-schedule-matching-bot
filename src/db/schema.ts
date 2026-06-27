@@ -63,6 +63,24 @@ export const recruitEntries = sqliteTable(
   (t) => [primaryKey({ columns: [t.recruitId, t.userId] })],
 );
 
+// 募集メッセージ内 select の中間状態（希望パーティサイズ/希望時間）を保持する一時テーブル。
+// 「登録・更新」ボタンで recruit_entries へ確定し、確定後はこの draft 行を削除する。
+// select は別 interaction で届くため、片方だけ選択済みを表現できるよう各値は nullable。
+export const recruitEntryDrafts = sqliteTable(
+  "recruit_entry_drafts",
+  {
+    recruitId: text("recruit_id")
+      .notNull()
+      .references(() => recruits.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    availableFromUtc: text("available_from_utc"),
+    partySizePreference: text("party_size_preference"),
+    createdAtUtc: text("created_at_utc").notNull(),
+    updatedAtUtc: text("updated_at_utc").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.recruitId, t.userId] })],
+);
+
 export const riotAccounts = sqliteTable(
   "riot_accounts",
   {
@@ -88,4 +106,5 @@ export type GuildSetting = typeof guildSettings.$inferSelect;
 export type Schedule = typeof schedules.$inferSelect;
 export type Recruit = typeof recruits.$inferSelect;
 export type RecruitEntry = typeof recruitEntries.$inferSelect;
+export type RecruitEntryDraft = typeof recruitEntryDrafts.$inferSelect;
 export type RiotAccount = typeof riotAccounts.$inferSelect;

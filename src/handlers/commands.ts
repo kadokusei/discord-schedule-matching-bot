@@ -270,12 +270,12 @@ const handleScheduleCreate = async (
   const resolvedDuration = duration ?? settings?.defaultDurationMin ?? 360;
   const resolvedTemplate = settings?.defaultTemplate ?? "";
 
-  // Modal の available_time は HH:mm 入力で候補を一意に解決するため、
-  // 入力候補（= 時間スロット数）が HH:mm 衝突しない 24 個以内に収まるようにする。
+  // 希望時間は募集メッセージ内の time select（ISO value を送信）で選ぶため HH:mm 一意制約は不要。
+  // 上限は Discord string select options 制約の 25 個。
   const timeSlotCount = timeOptionCount(resolvedInterval, resolvedDuration);
-  if (timeSlotCount > MAX_TIME_OPTIONS - 1) {
+  if (timeSlotCount > MAX_TIME_OPTIONS) {
     return ephemeral(
-      `エラー: 時間の入力候補が多すぎます（間隔 ${resolvedInterval}分 / 期間 ${resolvedDuration}分 → ${timeSlotCount}個）。入力候補は ${MAX_TIME_OPTIONS - 1}個までです。間隔を広げるか期間を短くしてください。`,
+      `エラー: 時間の選択肢が多すぎます（間隔 ${resolvedInterval}分 / 期間 ${resolvedDuration}分 → ${timeSlotCount}個）。選択肢は ${MAX_TIME_OPTIONS}個までです。間隔を広げるか期間を短くしてください。`,
     );
   }
 
