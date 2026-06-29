@@ -11,13 +11,14 @@ import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import { editOriginalInteractionResponse } from "../features/discord";
 import {
+  type PartySizePreference,
   PARTY_SIZE_PREFERENCES,
   isPartySizePreference,
   isRecruitActive,
   partySizePreferenceLabel,
 } from "../features/recruit";
 import { refreshUserRanks } from "../features/riot";
-import { buildTimeOptions } from "../shared/time";
+import { buildTimeOptions, resolveDefaultTimeOptionValue } from "../shared/time";
 import type { Env, WaitUntilContext } from "../lib/types";
 import { recomputeMatch } from "./matching";
 
@@ -99,6 +100,7 @@ const loadActiveRecruitContext = async (
 const buildRegisterModalResponse = async (
   env: Env,
   recruitId: string,
+  userId: string,
 ): Promise<APIInteractionResponse> => {
   const db = drizzle(env.DB, { schema });
   const context = await loadActiveRecruitContext(db, recruitId);
@@ -106,12 +108,30 @@ const buildRegisterModalResponse = async (
     return ephemeralMessage(context);
   }
 
+  // 更新時の文脈に合わせた default 選択のため、押下ユーザーの既存 entry を読む
+  const existingEntry = await db
+    .select()
+    .from(schema.recruitEntries)
+    .where(
+      and(eq(schema.recruitEntries.recruitId, recruitId), eq(schema.recruitEntries.userId, userId)),
+    )
+    .get();
+
   const timeOptions = buildTimeOptions(
     context.recruit.targetDateLocal,
     context.schedule.postTimeHHmm,
     context.schedule.intervalMin,
     context.schedule.durationMin,
     context.timezone,
+  );
+
+  const existingPartySize = existingEntry?.partySizePreference;
+  const defaultPartySizePreference: PartySizePreference = isPartySizePreference(existingPartySize)
+    ? existingPartySize
+    : "any";
+  const defaultAvailableFromUtc = resolveDefaultTimeOptionValue(
+    timeOptions,
+    existingEntry?.availableFromUtc,
   );
 
   return {
@@ -129,6 +149,7 @@ const buildRegisterModalResponse = async (
             options: PARTY_SIZE_PREFERENCES.map((value) => ({
               label: partySizePreferenceLabel(value),
               value,
+              ...(value === defaultPartySizePreference ? { default: true } : {}),
             })),
             min_values: 1,
             max_values: 1,
@@ -141,7 +162,11 @@ const buildRegisterModalResponse = async (
           component: {
             type: ComponentType.StringSelect,
             custom_id: "available_time",
-            options: timeOptions.map((opt) => ({ label: opt.label, value: opt.value })),
+            options: timeOptions.map((opt) => ({
+              label: opt.label,
+              value: opt.value,
+              ...(opt.value === defaultAvailableFromUtc ? { default: true } : {}),
+            })),
             min_values: 1,
             max_values: 1,
             required: true,
@@ -162,7 +187,11 @@ export const handleComponentInteraction = async (
 
   // 「登録・更新」ボタンは Modal を同期的に返す（deferred 不可）
   if (action === "register") {
-    return await buildRegisterModalResponse(env, recruitId);
+    const userId = interaction.member?.user?.id ?? interaction.user?.id ?? "";
+    if (!recruitId || !userId) {
+      return ephemeralMessage("エラー: 必要な情報が不足しています");
+    }
+    return await buildRegisterModalResponse(env, recruitId, userId);
   }
 
   ctx.waitUntil(

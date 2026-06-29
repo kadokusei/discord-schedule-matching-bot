@@ -264,6 +264,14 @@ const contentOf = (body: unknown): string => {
   return "";
 };
 
+/** Modal 応答の Label(type 18) 配下 string select を名前付きキャストするための型。 */
+type ModalSelect = {
+  component: {
+    custom_id: string;
+    options?: { label: string; value: string; default?: boolean }[];
+  };
+};
+
 describe("登録・更新 Modal フロー", () => {
   const db = drizzle(env.DB, { schema });
 
@@ -404,9 +412,12 @@ describe("登録・更新 Modal フロー", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it("recruit:register ボタンは Modal(type 9)を返し、パーティサイズ select と時間 select を含む", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T11:08:00.000Z"));
     captureFetch();
     await insertSettings();
     await insertSchedule();
@@ -419,7 +430,7 @@ describe("登録・更新 Modal フロー", () => {
     // discord-api-types は Label(type 18) を型付けしないため、応答 data を Modal 構造へ名前付きキャスト
     const data = response.data as {
       custom_id: string;
-      components: { type: number; component: { custom_id: string; options?: unknown[] } }[];
+      components: ModalSelect[];
     };
     expect(data.custom_id).toBe("recruit:register-modal:rec-open");
 
@@ -427,10 +438,49 @@ describe("登録・更新 Modal フロー", () => {
       (c) => c.component.custom_id === "party_size_preference",
     );
     expect(sizeSelect?.component.options).toHaveLength(3);
+    // 新規登録では「なんでも(any)」が default 選択
+    const sizeDefault = sizeSelect?.component.options?.find((o) => o.default === true);
+    expect(sizeDefault?.value).toBe("any");
 
     // 希望時間 select は buildTimeOptions 件数（360/30 + 1 = 13）
     const timeSelect = data.components.find((c) => c.component.custom_id === "available_time");
     expect(timeSelect?.component.options).toHaveLength(13);
+    // 20:08 JST(=11:08 UTC) 押下なら直前候補 20:00 JST(=11:00 UTC) が default 選択
+    const timeDefault = timeSelect?.component.options?.find((o) => o.default === true);
+    expect(timeDefault?.value).toBe(FIRST_SLOT_UTC);
+  });
+
+  it("既存登録がある register ボタンは以前の希望時間とパーティサイズを default にする", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T11:08:00.000Z"));
+    captureFetch();
+    await insertSettings();
+    await insertSchedule();
+    await insertRecruit("rec-existing", "open");
+    await db.insert(schema.recruitEntries).values({
+      recruitId: "rec-existing",
+      userId: "clicker",
+      availableFromUtc: "2026-06-15T11:30:00.000Z",
+      partySizePreference: "full_party",
+      createdAtUtc: "2026-06-15T10:00:00.000Z",
+      updatedAtUtc: "2026-06-15T10:00:00.000Z",
+    });
+
+    const response = await runComponent(buttonPayload("recruit:register:rec-existing"));
+
+    expect(response.type).toBe(9);
+    if (response.type !== 9) throw new Error("expected modal response");
+    const data = response.data as { custom_id: string; components: ModalSelect[] };
+
+    const sizeSelect = data.components.find(
+      (c) => c.component.custom_id === "party_size_preference",
+    );
+    const sizeDefault = sizeSelect?.component.options?.find((o) => o.default === true);
+    expect(sizeDefault?.value).toBe("full_party");
+
+    const timeSelect = data.components.find((c) => c.component.custom_id === "available_time");
+    const timeDefault = timeSelect?.component.options?.find((o) => o.default === true);
+    expect(timeDefault?.value).toBe("2026-06-15T11:30:00.000Z");
   });
 
   it("終端状態(closed)の募集の register ボタンは Modal ではなく ephemeral エラー(type 4)", async () => {

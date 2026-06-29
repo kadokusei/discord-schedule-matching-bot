@@ -62,3 +62,36 @@ export function buildTimeOptions(
 
   return options;
 }
+
+/**
+ * Modal の時間 select で default 選択する候補値を解決する。
+ *
+ * 1. 既存登録の availableFromUtc が候補内に存在すればそれを返す（更新時の優先）。
+ * 2. now 以下の最新候補を返す。now が最初の候補より前なら先頭、最後より後なら末尾に clamp する。
+ *    Discord select は候補外値を default にできないため、候補内で最も近い端に丸める。
+ * 3. 候補が空なら undefined（Modal 生成側は default を付けない）。
+ */
+export function resolveDefaultTimeOptionValue(
+  timeOptions: TimeOption[],
+  existingAvailableFromUtc: string | null | undefined,
+  now: Date = new Date(),
+): string | undefined {
+  if (
+    existingAvailableFromUtc &&
+    timeOptions.some((opt) => opt.value === existingAvailableFromUtc)
+  ) {
+    return existingAvailableFromUtc;
+  }
+  if (timeOptions.length === 0) return undefined;
+
+  const nowMs = now.getTime();
+  let result = timeOptions[0]?.value;
+  for (const opt of timeOptions) {
+    if (Date.parse(opt.value) <= nowMs) {
+      result = opt.value;
+    } else {
+      break;
+    }
+  }
+  return result;
+}

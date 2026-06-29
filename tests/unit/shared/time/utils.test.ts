@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildTimeOptions,
   localDateTimeToUtc,
+  resolveDefaultTimeOptionValue,
   timeOptionCount,
   type TimeOption,
 } from "../../../../src/shared/time";
@@ -185,5 +186,47 @@ describe("localDateTimeToUtc", () => {
     const result = localDateTimeToUtc("2026-01-18", "23:30", "Asia/Tokyo");
 
     expect(result.toISOString()).toBe("2026-01-18T14:30:00.000Z");
+  });
+});
+
+describe("resolveDefaultTimeOptionValue", () => {
+  const targetDateLocal = "2026-06-15";
+  const postTimeHHmm = "20:00";
+  const intervalMin = 30;
+  const durationMin = 360;
+  const tz = "Asia/Tokyo";
+
+  // 20:00 JST = 11:00 UTC 開始、30 分間隔で 6 時間（13 件）
+  const options = buildTimeOptions(targetDateLocal, postTimeHHmm, intervalMin, durationMin, tz);
+
+  it("existingAvailableFromUtc が候補内にあれば now より優先して既存値を返す", () => {
+    const now = new Date("2026-06-15T11:08:00.000Z");
+    const existing = "2026-06-15T13:00:00.000Z"; // 22:00 JST 候補
+
+    expect(resolveDefaultTimeOptionValue(options, existing, now)).toBe(existing);
+  });
+
+  it("既存値が無ければ now 以下の最新候補を選ぶ（11:08 UTC → 11:00 UTC）", () => {
+    const now = new Date("2026-06-15T11:08:00.000Z");
+
+    expect(resolveDefaultTimeOptionValue(options, null, now)).toBe("2026-06-15T11:00:00.000Z");
+  });
+
+  it("now が最初の候補より前なら先頭を返す", () => {
+    const now = new Date("2026-06-15T10:00:00.000Z");
+
+    expect(resolveDefaultTimeOptionValue(options, undefined, now)).toBe(options[0]?.value);
+  });
+
+  it("now が最後の候補より後なら末尾を返す", () => {
+    const now = new Date("2026-06-15T20:00:00.000Z");
+
+    expect(resolveDefaultTimeOptionValue(options, undefined, now)).toBe(
+      options[options.length - 1]?.value,
+    );
+  });
+
+  it("timeOptions が空なら undefined を返す", () => {
+    expect(resolveDefaultTimeOptionValue([], undefined, new Date())).toBeUndefined();
   });
 });
